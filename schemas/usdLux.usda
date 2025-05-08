@@ -1,0 +1,228 @@
+#usda 1.0
+
+# TODO: BoundableLightBase and NonboundableLightBase inherit from LightAPI,
+# however in USD, they should not inherit but prepend apiSchemas = ["LightAPI"].
+# The USDA parser doesn't support this yet, so this is a workaround for now.
+
+class "LightAPI" (
+    doc = "API schema that imparts the quality of being a light onto a prim."
+) {
+    float inputs:intensity = 1 (
+        displayGroup = "Basic"
+        displayName = "Intensity"
+        doc = "Scales the brightness of the light linearly."
+        customData = {
+            token apiName = "intensity"
+        }
+    )
+    float inputs:exposure = 0 (
+        displayGroup = "Basic"
+        displayName = "Exposure"
+        doc = """Scales the brightness of the light exponentially as a power
+        of 2 (similar to an F-stop control over exposure). The result
+        is multiplied against the intensity."""
+        customData = {
+            token apiName = "exposure"
+        }
+    )
+    float inputs:diffuse = 1.0 (
+        displayGroup = "Refine"
+        displayName = "Diffuse Multiplier"
+        doc = """A multiplier for the effect of this light on the diffuse
+        response of materials. This is a non-physical control."""
+        customData = {
+            token apiName = "diffuse"
+        }
+    )
+    float inputs:specular = 1.0 (
+        displayGroup = "Refine"
+        displayName = "Specular Multiplier"
+        doc = """A multiplier for the effect of this light on the specular
+        response of materials. This is a non-physical control."""
+        customData = {
+            token apiName = "specular"
+        }
+    )
+    bool inputs:normalize = false (
+        displayGroup = "Advanced"
+        displayName = "Normalize Power"
+        doc = """Normalizes the emission such that the power of the light
+        remains constant while altering the size of the light, by dividing the
+        luminance by the world-space surface area of the light.
+
+        This makes it easier to independently adjust the brightness and size
+        of the light, by causing the total illumination provided by a light to
+        not vary with the area or angular size of the light.
+        """
+        customData = {
+            token apiName = "normalize"
+        }
+    )
+    color3f inputs:color = (1, 1, 1) (
+        displayGroup = "Basic"
+        displayName = "Color"
+        doc = """The color of emitted light, in the rendering color space.
+        This color is just multiplied with the emission."""
+        customData = {
+            token apiName = "color"
+        }
+    )
+    bool inputs:enableColorTemperature = false (
+        displayGroup = "Basic"
+        displayName = "Enable Color Temperature"
+        doc = """Enables using colorTemperature."""
+        customData = {
+            token apiName = "enableColorTemperature"
+        }
+    )
+    float inputs:colorTemperature = 6500 (
+        displayGroup = "Basic"
+        displayName = "Color Temperature"
+        doc = """Color temperature, in degrees Kelvin, representing the
+        white point.  The default is a common white point, D65.  Lower
+        values are warmer and higher values are cooler.  The valid range
+        is from 1000 to 10000. Only takes effect when
+        enableColorTemperature is set to true.
+        """
+        customData = {
+            token apiName = "colorTemperature"
+        }
+    )
+}
+
+class "BoundableLightBase" (
+    inherits = </LightAPI>
+    doc = """Base class for intrinsic lights that are boundable."""
+) {
+}
+
+class "NonboundableLightBase" (
+    inherits = </LightAPI>
+    doc = """Base class for intrinsic lights that are not boundable."""
+) {
+}
+
+class DiskLight "DiskLight" (
+    inherits = </BoundableLightBase>
+    doc = """Light emitted from one side of a circular disk.
+    The disk is centered in the XY plane and emits light along the -Z axis."""
+) {
+    float inputs:radius = 0.5 (
+        displayGroup = "Geometry"
+        displayName = "Radius"
+        doc = "Radius of the disk."
+        customData = {
+            token apiName = "radius"
+        }
+    )
+}
+
+class RectLight "RectLight" (
+    inherits = </BoundableLightBase>
+    doc = """Light emitted from one side of a rectangle.
+    The rectangle is centered in the XY plane and emits light along the -Z axis.
+    The rectangle is 1 unit in length in the X and Y axis.  In the default 
+    position, a texture file's min coordinates should be at (+X, +Y) and 
+    max coordinates at (-X, -Y)."""
+) {
+    float inputs:width = 1 (
+        displayGroup = "Geometry"
+        displayName = "Width"
+        doc = "Width of the rectangle, in the local X axis."
+        customData = {
+            token apiName = "width"
+        }
+
+    )
+    float inputs:height = 1 (
+        displayGroup = "Geometry"
+        displayName = "Height"
+        doc = "Height of the rectangle, in the local Y axis."
+        customData = {
+            token apiName = "height"
+        }
+    )
+    asset inputs:texture:file (
+        displayGroup = "Basic"
+        displayName = "Color Map"
+        doc = """A color texture to use on the rectangle."""
+        customData = {
+            token apiName = "textureFile"
+        }
+    )
+}
+
+class SphereLight "SphereLight" (
+    inherits = </BoundableLightBase>
+    doc = """Light emitted outward from a sphere."""
+) {
+    float inputs:radius = 0.5 (
+        displayGroup = "Geometry"
+        displayName = "Radius"
+        doc = "Radius of the sphere."
+        customData = {
+            token apiName = "radius"
+        }
+    )
+    bool treatAsPoint = false (
+        displayGroup = "Advanced"
+        displayName = "Treat As Point"
+        doc = """A hint that this light can be treated as a 'point'
+        light (effectively, a zero-radius sphere) by renderers that
+        benefit from non-area lighting. Renderers that only support
+        area lights can disregard this."""
+    )
+}
+
+class DomeLight "DomeLight" (
+    inherits = </NonboundableLightBase>
+    doc = """Light emitted inward from a distant external environment,
+    such as a sky or IBL light probe.
+    
+    In this version of the dome light, the dome's default orientation is such
+    that its top pole is aligned with the world's +Y axis. This adheres to the
+    OpenEXR specification for latlong environment maps."""
+) {
+    asset inputs:texture:file (
+        displayGroup = "Basic"
+        displayName = "Color Map"
+        doc = """A color texture to use on the dome, such as an HDR (high
+        dynamic range) texture intended for IBL (image based lighting)."""
+        customData = {
+            token apiName = "textureFile"
+        }
+    )
+    token inputs:texture:format = "automatic" (
+        displayGroup = "Basic"
+        displayName = "Color Map Format"
+        allowedTokens = ["automatic", "latlong", "mirroredBall", "angular", "cubeMapVerticalCross"]
+        doc = """
+        Specifies the parameterization of the color map file.
+        Valid values are:
+        - automatic: Tries to determine the layout from the file itself.
+          For example, Renderman texture files embed an explicit
+          parameterization.
+        - latlong: Latitude as X, longitude as Y.
+        - mirroredBall: An image of the environment reflected in a
+          sphere, using an implicitly orthogonal projection.
+        - angular: Similar to mirroredBall but the radial dimension
+          is mapped linearly to the angle, providing better sampling
+          at the edges.
+        - cubeMapVerticalCross: A cube map with faces laid out as a
+          vertical cross.
+        """
+        customData = {
+            token apiName = "textureFormat"
+        }
+    )
+    rel portals (
+        doc = """Optional portals to guide light sampling."""
+    )
+    float guideRadius = 100000 (
+        displayGroup = "Guides"
+        displayName = "Radius"
+        doc = """The radius of guide geometry to use to visualize the dome light.
+        The default is 1 km for scenes whose metersPerUnit is the USD default of
+        0.01 (i.e., 1 world unit is 1 cm)."""
+    )
+}

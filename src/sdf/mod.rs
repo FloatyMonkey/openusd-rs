@@ -1,0 +1,100 @@
+//! Scene Description Foundations.
+
+mod abstract_data;
+mod list_op;
+mod path;
+mod path_node;
+mod path_parser;
+mod schema;
+
+pub use abstract_data::*;
+pub use list_op::*;
+pub use path::*;
+pub use schema::{CHILDREN_KEYS, FIELD_KEYS};
+
+use crate::vt;
+
+/// An enum that specifies the type of an object.
+/// Objects have fields and are adressable by path.
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum SpecType {
+	// Note: Do not change the order, it is used in the binary format!
+	Unknown = 0,
+	Attribute,
+	Connection,
+	Expression,
+	Mapper,
+	MapperArg,
+	Prim,
+	PseudoRoot,
+	Relationship,
+	RelationshipTarget,
+	Variant,
+	VariantSet,
+}
+
+/// An enum that identifies the possible specifiers for an sdf::PrimSpec.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Specifier {
+	Def,
+	Over,
+	Class,
+}
+
+/// An enum that defines permission levels.
+#[derive(Debug, Clone, Copy)]
+pub enum Permission {
+	Public,
+	Private,
+}
+
+/// An enum that identifies variability types for attributes.
+#[derive(Debug, Clone, Copy)]
+pub enum Variability {
+	Varying,
+	Uniform,
+}
+
+/// Represents a time offset and scale between layers.
+#[derive(Debug, Default, Clone)]
+pub struct LayerOffset {
+	pub offset: f64,
+	pub scale: f64,
+}
+
+/// Represents a reference and all its meta data.
+#[derive(Debug, Default, Clone)]
+pub struct Reference {
+	/// The asset path to the external layer.
+	pub asset_path: String,
+	/// The path to the referenced prim in the external layer.
+	pub prim_path: Path,
+	/// The layer offset to transform time.
+	pub layer_offset: LayerOffset,
+	/// The custom data associated with the reference.
+	pub custom_data: vt::Dictionary,
+}
+
+/// Represents a payload and all its meta data.
+#[derive(Debug, Default, Clone)]
+pub struct Payload {
+	/// The asset path to the external layer.
+	pub asset_path: String,
+	/// The root prim path to the referenced prim in the external layer.
+	pub prim_path: Path,
+	/// The layer offset to transform time.
+	pub layer_offset: LayerOffset,
+}
+
+/// A single relocate specifying a source sdf::Path and a target sdf::Path for a relocation.
+pub struct Relocate {
+	pub source: Path,
+	pub target: Path,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AssetPath {
+	pub asset_path: String,
+	pub resolved_path: String,
+}

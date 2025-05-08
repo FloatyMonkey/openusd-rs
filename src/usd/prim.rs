@@ -1,0 +1,83 @@
+use super::{Attribute, Object};
+use crate::{sdf, tf, usd};
+
+#[repr(transparent)]
+pub struct Prim<'a>(Object<'a>);
+
+impl<'a> Prim<'a> {
+	pub(crate) fn new(stage: &'a usd::Stage, path: sdf::Path) -> Self {
+		Prim(Object::new(stage, path))
+	}
+
+	pub fn specifier(&self) -> Option<sdf::Specifier> {
+		self.stage()
+			.data()
+			.get(self.path(), &sdf::FIELD_KEYS.specifier)
+			.map(|v| v.get::<sdf::Specifier>())
+			.flatten()
+	}
+
+	pub fn get_attribute<'b>(&'b self, name: &tf::Token) -> Attribute<'b> {
+		Attribute::new(self.stage(), self.path().append_property(name))
+	}
+
+	pub fn has_attribute(&self, name: &tf::Token) -> bool {
+		self.stage()
+			.data()
+			.get(&self.path().append_property(name), &sdf::FIELD_KEYS.default)
+			.is_some()
+	}
+
+	pub fn children<'b>(&'b self) -> ChildrenIter<'b> {
+		ChildrenIter::new(self.stage(), self.path())
+	}
+
+	pub fn type_name(&self) -> tf::Token {
+		self.metadata(&sdf::FIELD_KEYS.type_name)
+			.unwrap_or_default()
+	}
+}
+
+impl<'a> std::ops::Deref for Prim<'a> {
+	type Target = Object<'a>;
+	fn deref(&self) -> &Self::Target {
+		unsafe { std::mem::transmute(self) }
+	}
+}
+
+pub struct ChildrenIter<'a> {
+	stage: &'a usd::Stage,
+	base_path: sdf::Path,
+	prim_children: Vec<tf::Token>,
+	index: usize,
+}
+
+impl<'a> ChildrenIter<'a> {
+	pub fn new(stage: &'a usd::Stage, path: &sdf::Path) -> Self {
+		ChildrenIter {
+			stage,
+			base_path: path.clone(),
+			prim_children: stage
+				.data()
+				.get(&path, &sdf::CHILDREN_KEYS.prim_children)
+				.map(|v| v.get::<Vec<tf::Token>>())
+				.flatten()
+				.unwrap_or_default(),
+			index: 0,
+		}
+	}
+}
+
+impl<'a> Iterator for ChildrenIter<'a> {
+	type Item = Prim<'a>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		if self.index < self.prim_children.len() {
+			let path = self.prim_children[self.index].clone();
+			self.index += 1;
+			Some(Prim::new(self.stage, self.base_path.append_child(&path)))
+		} else {
+			None
+		}
+	}
+}

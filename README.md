@@ -1,18 +1,18 @@
 <div align="center">
 
 # OpenUSD-rs
-**Pure Rust implementation of [OpenUSD](https://github.com/PixarAnimationStudios/OpenUSD)**
+**Work in progress, opinionated implementation of [OpenUSD](https://github.com/PixarAnimationStudios/OpenUSD) in pure Rust**
 
 </div>
 
-Work in progress, opinionated implementation of OpenUSD in pure Rust. For now, the focus lies on reading from flattened files. It is already possible to extract basic scene information for rendering. Expect major API changes during the early stages of development. Once the official OpenUSD specification is released, we aim to be compliant.
+For now, the focus is on reading from flattened files. It is already possible to extract basic scene information for rendering. Expect major API changes during the early stages of development. Once the official OpenUSD specification is released, we aim to be compliant where possible.
 
 Currently mostly reflects the needs of our own [engine](https://github.com/FloatyMonkey/engine) but contributions are more than welcome.
 
 ## Example
 
 ```rust
-use openusd::{gf, vt, usd, usd_geom};
+use openusd_rs::{gf, vt, usd, usd_geom};
 
 let stage = usd::Stage::open("FlattenedUsdFile.usdc");
 let mesh = usd_geom::Mesh::define(&stage, "/Path/To/Mesh/Prim");
@@ -31,11 +31,7 @@ for prim in stage.pseudo_root().children() {
 
 ## Installation
 
-Add the following to the `[dependencies]` section of your `Cargo.toml`:
-
-```
-openusd = { git = "https://github.com/FloatyMonkey/openusd-rs.git" }
-```
+Add `openusd-rs` to the `[dependencies]` section of your `Cargo.toml`.
 
 ## Credits
 

@@ -1,3 +1,5 @@
+//! Work in progress, opinionated implementation of [OpenUSD](https://github.com/PixarAnimationStudios/OpenUSD) in pure Rust
+
 pub mod gf;
 pub mod sdf;
 pub mod tf;

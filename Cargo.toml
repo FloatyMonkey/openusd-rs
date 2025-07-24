@@ -1,14 +1,16 @@
 [package]
-name = "openusd"
+name = "openusd-rs"
 version = "0.1.0"
 edition = "2024"
-publish = false
+description = "Work in progress, opinionated implementation of OpenUSD in pure Rust"
+repository = "https://github.com/FloatyMonkey/openusd-rs"
 license = "MIT OR Apache-2.0"
+categories = ["graphics", "encoding", "rendering::data-formats"]
 
 [dependencies]
-glam = "0.30.3"
+glam = "0.30.4"
 half = "2.6.0"
-lz4_flex = "0.11.3"
+lz4_flex = "0.11.5"
 
 [[bin]]
 name = "genschema"

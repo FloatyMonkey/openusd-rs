@@ -6,7 +6,7 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
-use openusd::{sdf, tf, usd};
+use openusd_rs::{sdf, tf, usd};
 
 #[derive(Debug, Clone)]
 struct ClassDef {

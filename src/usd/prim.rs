@@ -1,6 +1,8 @@
 use super::{Attribute, Object};
 use crate::{sdf, tf, usd};
 
+/// [`usd::Prim`] is the sole persistent scenegraph object on a [`usd::Stage`],
+/// and is the embodiment of a "Prim" as described in the *Universal Scene Description Composition Compendium*.
 #[repr(transparent)]
 pub struct Prim<'a>(Object<'a>);
 

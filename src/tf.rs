@@ -1,3 +1,5 @@
+//! Tools Foundations
+
 /// Token for efficient comparison, assignment, and hashing of known strings.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct Token {
@@ -26,7 +28,6 @@ impl std::fmt::Display for Token {
 	}
 }
 
-#[macro_export]
 macro_rules! declare_public_tokens {
 	($struct:ident, $static:ident, [$($name:ident: $value:expr),*]) => {
 		pub struct $struct {
@@ -40,3 +41,5 @@ macro_rules! declare_public_tokens {
 		});
 	};
 }
+
+pub(crate) use declare_public_tokens;

@@ -1,36 +1,36 @@
 #usda 1.0
 
 class "Imageable" {
-	token visibility = "inherited"
-	uniform token purpose = "default"
+    token visibility = "inherited"
+    uniform token purpose = "default"
 }
 
 class "Xformable" (
-	inherits = </Imageable>
+    inherits = </Imageable>
 ) {
-	uniform token[] xformOpOrder
+    uniform token[] xformOpOrder
 }
 
 class "Boundable" (
-	inherits = </Xformable>
+    inherits = </Xformable>
 ) {
 }
 
 class "Gprim" (
-	inherits = </Boundable>
+    inherits = </Boundable>
 ) {
 }
 
 class "PointBased" (
-	inherits = </Gprim>
+    inherits = </Gprim>
 ) {
-	point3f[] points
-	normal3f[] normals
+    point3f[] points
+    normal3f[] normals
 }
 
 class Mesh "Mesh" (
-	inherits = </PointBased>
+    inherits = </PointBased>
 ) {
-	int[] faceVertexIndices
-	int[] faceVertexCounts
+    int[] faceVertexIndices
+    int[] faceVertexCounts
 }

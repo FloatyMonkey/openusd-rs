@@ -296,7 +296,8 @@ fn asset_ref<'a>(i: &mut In<'a>) -> PResult<sdf::AssetPath> {
 	)?;
 
 	Ok(sdf::AssetPath {
-		asset_path: path.to_string(),
+		authored_path: path.to_string(),
+		evaluated_path: String::new(),
 		resolved_path: String::new(),
 	})
 }
@@ -689,14 +690,16 @@ mod tests {
 		assert_eq!(
 			run_parse(&mut c, asset_ref, "@/asset/path.png@").unwrap(),
 			sdf::AssetPath {
-				asset_path: "/asset/path.png".to_string(),
+				authored_path: "/asset/path.png".to_string(),
+				evaluated_path: String::new(),
 				resolved_path: String::new(),
 			}
 		);
 		assert_eq!(
 			run_parse(&mut c, asset_ref, "@./relative.usd@").unwrap(),
 			sdf::AssetPath {
-				asset_path: "./relative.usd".to_string(),
+				authored_path: "./relative.usd".to_string(),
+				evaluated_path: String::new(),
 				resolved_path: String::new(),
 			}
 		);

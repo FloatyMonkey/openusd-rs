@@ -4,6 +4,7 @@ use crate::{
 	vt::{self, ValueType},
 };
 
+/// Scenegraph object for authoring and retrieving numeric, string, and array valued data, sampled over time, or animated by a spline.
 #[repr(transparent)]
 pub struct Attribute<'a>(Property<'a>);
 

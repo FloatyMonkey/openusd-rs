@@ -1,3 +1,5 @@
+//! Graphics Foundations
+
 use half::f16;
 
 #[repr(C)]

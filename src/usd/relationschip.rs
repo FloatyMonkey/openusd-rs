@@ -1,6 +1,7 @@
 use super::Property;
 use crate::{sdf, usd};
 
+/// A [`usd::Relationship`] creates dependencies between scenegraph objects by allowing a prim to target other prims, attributes, or relationships.
 #[repr(transparent)]
 pub struct Relationship<'a>(Property<'a>);
 

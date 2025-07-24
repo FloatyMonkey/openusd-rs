@@ -6,6 +6,8 @@ use crate::{
 
 use super::Prim;
 
+/// The outermost container for scene description, which owns and presents composed prims as a scenegraph,
+/// following the composition recipe recursively described in its associated "root layer".
 pub struct Stage {
 	data: Box<dyn AbstractData>,
 }

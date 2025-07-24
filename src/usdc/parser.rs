@@ -668,42 +668,36 @@ fn build_decompressed_paths_recursive(
 }
 
 fn read_inline_vec2<T: Copy + From<i8>>(rep: ValueRep) -> gf::Vec2<T> {
-	let val = rep.payload() as u32;
-	let val: [i8; 4] = unsafe { std::mem::transmute(val) };
-	gf::Vec2::<T>::new(val[0].into(), val[1].into())
+	let v = (rep.payload() as u32).to_ne_bytes().map(|b| b as i8);
+	gf::Vec2::<T>::new(v[0].into(), v[1].into())
 }
 
 fn read_inline_vec3<T: Copy + From<i8>>(rep: ValueRep) -> gf::Vec3<T> {
-	let val = rep.payload() as u32;
-	let val: [i8; 4] = unsafe { std::mem::transmute(val) };
-	gf::Vec3::<T>::new(val[0].into(), val[1].into(), val[2].into())
+	let v = (rep.payload() as u32).to_ne_bytes().map(|b| b as i8);
+	gf::Vec3::<T>::new(v[0].into(), v[1].into(), v[2].into())
 }
 
 fn read_inline_vec4<T: Copy + From<i8>>(rep: ValueRep) -> gf::Vec4<T> {
-	let val = rep.payload() as u32;
-	let val: [i8; 4] = unsafe { std::mem::transmute(val) };
-	gf::Vec4::<T>::new(val[0].into(), val[1].into(), val[2].into(), val[3].into())
+	let v = (rep.payload() as u32).to_ne_bytes().map(|b| b as i8);
+	gf::Vec4::<T>::new(v[0].into(), v[1].into(), v[2].into(), v[3].into())
 }
 
 fn read_inline_mat2(rep: ValueRep) -> gf::Matrix2d {
-	let val = rep.payload() as u32;
-	let val: [i8; 4] = unsafe { std::mem::transmute(val) };
-	let val = gf::Vec2d::new(val[0].into(), val[1].into());
-	gf::Matrix2d::from_diagonal(val)
+	let v = (rep.payload() as u32).to_ne_bytes().map(|b| b as i8);
+	let v = gf::Vec2d::new(v[0].into(), v[1].into());
+	gf::Matrix2d::from_diagonal(v)
 }
 
 fn read_inline_mat3(rep: ValueRep) -> gf::Matrix3d {
-	let val = rep.payload() as u32;
-	let val: [i8; 4] = unsafe { std::mem::transmute(val) };
-	let val = gf::Vec3d::new(val[0].into(), val[1].into(), val[2].into());
-	gf::Matrix3d::from_diagonal(val)
+	let v = (rep.payload() as u32).to_ne_bytes().map(|b| b as i8);
+	let v = gf::Vec3d::new(v[0].into(), v[1].into(), v[2].into());
+	gf::Matrix3d::from_diagonal(v)
 }
 
 fn read_inline_mat4(rep: ValueRep) -> gf::Matrix4d {
-	let val = rep.payload() as u32;
-	let val: [i8; 4] = unsafe { std::mem::transmute(val) };
-	let val = gf::Vec4d::new(val[0].into(), val[1].into(), val[2].into(), val[3].into());
-	gf::Matrix4d::from_diagonal(val)
+	let v = (rep.payload() as u32).to_ne_bytes().map(|b| b as i8);
+	let v = gf::Vec4d::new(v[0].into(), v[1].into(), v[2].into(), v[3].into());
+	gf::Matrix4d::from_diagonal(v)
 }
 
 fn read_pod<T: Sized + Default>(cursor: &mut Cursor<&[u8]>) -> T {
@@ -784,14 +778,14 @@ impl sdf::AbstractData for UsdcFile {
 
 			Type::Float if value.is_inlined() => {
 				let val = value.payload() as u32;
-				let val: f32 = unsafe { std::mem::transmute(val) };
-				val.into()
+				f32::from_bits(val).into()
 			}
 
 			Type::AssetPath => {
 				let token = self.tokens[value.payload() as usize].clone();
 				vt::Value::new(sdf::AssetPath {
-					asset_path: token.as_str().into(),
+					authored_path: token.as_str().into(),
+					evaluated_path: String::new(),
 					resolved_path: "".into(),
 				})
 			}

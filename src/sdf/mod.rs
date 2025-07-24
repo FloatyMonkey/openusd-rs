@@ -1,4 +1,4 @@
-//! Scene Description Foundations.
+//! Scene Description Foundations
 
 mod abstract_data;
 mod list_op;
@@ -34,7 +34,7 @@ pub enum SpecType {
 	VariantSet,
 }
 
-/// An enum that identifies the possible specifiers for an sdf::PrimSpec.
+/// An enum that identifies the possible specifiers for a PrimSpec.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Specifier {
 	Def,
@@ -87,14 +87,16 @@ pub struct Payload {
 	pub layer_offset: LayerOffset,
 }
 
-/// A single relocate specifying a source sdf::Path and a target sdf::Path for a relocation.
+/// A single relocate specifying a source and target path for a relocation.
 pub struct Relocate {
 	pub source: Path,
 	pub target: Path,
 }
 
+/// Contains an asset path and optional evaluated and resolved paths.
 #[derive(Debug, Clone, PartialEq)]
 pub struct AssetPath {
-	pub asset_path: String,
+	pub authored_path: String,
+	pub evaluated_path: String,
 	pub resolved_path: String,
 }

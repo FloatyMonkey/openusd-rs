@@ -1,3 +1,5 @@
+//! Value Types
+
 use super::*;
 use half::f16;
 use std::collections::HashMap;

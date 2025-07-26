@@ -3,6 +3,10 @@
 # OpenUSD-rs
 **Work in progress, opinionated implementation of [OpenUSD](https://github.com/PixarAnimationStudios/OpenUSD) in pure Rust**
 
+[![crates.io](https://img.shields.io/crates/v/openusd-rs?logo=rust&style=flat-square)](https://crates.io/crates/openusd-rs)
+[![docs.rs](https://img.shields.io/docsrs/openusd-rs?logo=docs.rs&style=flat-square)](https://docs.rs/openusd-rs)
+[![ci](https://img.shields.io/github/actions/workflow/status/FloatyMonkey/openusd-rs/ci.yml?branch=main&logo=github&style=flat-square)](https://github.com/FloatyMonkey/openusd-rs/actions/workflows/ci.yml)
+
 </div>
 
 For now, the focus is on reading from flattened files. It is already possible to extract basic scene information for rendering. Expect major API changes during the early stages of development. Once the official OpenUSD specification is released, we aim to be compliant where possible.

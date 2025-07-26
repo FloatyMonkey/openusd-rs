@@ -1,4 +1,4 @@
-//! This script generates Rust code for USD Schemata.
+//! This script generates Rust code for USD schemas.
 //! It is driven by a USD layer (schema.usda) that defines the schema classes.
 
 use std::collections::HashSet;
@@ -241,8 +241,8 @@ pub fn generate_code_from_schema(schema_path: &Path, output_path: &Path) -> io::
 
 fn main() -> io::Result<()> {
 	let schemas = vec![
-		["schemas/usdGeom.usda", "src/usd_geom.rs"],
-		["schemas/usdLux.usda", "src/usd_lux.rs"],
+		["src/usd_geom/schema.usda", "src/usd_geom/generated.rs"],
+		["src/usd_lux/schema.usda", "src/usd_lux/generated.rs"],
 	];
 
 	for [in_path_str, out_path_str] in schemas {

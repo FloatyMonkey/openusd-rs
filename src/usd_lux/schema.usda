@@ -15,6 +15,7 @@ class "LightAPI" (
             token apiName = "intensity"
         }
     )
+
     float inputs:exposure = 0 (
         displayGroup = "Basic"
         displayName = "Exposure"
@@ -25,6 +26,7 @@ class "LightAPI" (
             token apiName = "exposure"
         }
     )
+
     float inputs:diffuse = 1.0 (
         displayGroup = "Refine"
         displayName = "Diffuse Multiplier"
@@ -34,6 +36,7 @@ class "LightAPI" (
             token apiName = "diffuse"
         }
     )
+
     float inputs:specular = 1.0 (
         displayGroup = "Refine"
         displayName = "Specular Multiplier"
@@ -43,6 +46,7 @@ class "LightAPI" (
             token apiName = "specular"
         }
     )
+
     bool inputs:normalize = false (
         displayGroup = "Advanced"
         displayName = "Normalize Power"
@@ -58,6 +62,7 @@ class "LightAPI" (
             token apiName = "normalize"
         }
     )
+
     color3f inputs:color = (1, 1, 1) (
         displayGroup = "Basic"
         displayName = "Color"
@@ -67,6 +72,7 @@ class "LightAPI" (
             token apiName = "color"
         }
     )
+
     bool inputs:enableColorTemperature = false (
         displayGroup = "Basic"
         displayName = "Enable Color Temperature"
@@ -75,6 +81,7 @@ class "LightAPI" (
             token apiName = "enableColorTemperature"
         }
     )
+
     float inputs:colorTemperature = 6500 (
         displayGroup = "Basic"
         displayName = "Color Temperature"
@@ -134,6 +141,7 @@ class RectLight "RectLight" (
         }
 
     )
+
     float inputs:height = 1 (
         displayGroup = "Geometry"
         displayName = "Height"
@@ -142,6 +150,7 @@ class RectLight "RectLight" (
             token apiName = "height"
         }
     )
+
     asset inputs:texture:file (
         displayGroup = "Basic"
         displayName = "Color Map"
@@ -164,6 +173,7 @@ class SphereLight "SphereLight" (
             token apiName = "radius"
         }
     )
+
     bool treatAsPoint = false (
         displayGroup = "Advanced"
         displayName = "Treat As Point"
@@ -192,6 +202,7 @@ class DomeLight "DomeLight" (
             token apiName = "textureFile"
         }
     )
+
     token inputs:texture:format = "automatic" (
         displayGroup = "Basic"
         displayName = "Color Map Format"
@@ -215,9 +226,11 @@ class DomeLight "DomeLight" (
             token apiName = "textureFormat"
         }
     )
+
     rel portals (
         doc = """Optional portals to guide light sampling."""
     )
+
     float guideRadius = 100000 (
         displayGroup = "Guides"
         displayName = "Radius"

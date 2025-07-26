@@ -40,6 +40,7 @@ impl Context {
 
 type In<'a> = Input<'a, Context>;
 
+// TODO: Remove this and use the official USD whitespace definitions
 fn ws<'a, C>(i: &mut Input<'a, C>) -> PResult<()> {
 	blank(i)
 }
@@ -569,11 +570,10 @@ pub fn layer_spec<'a>(i: &mut In<'a>) -> PResult<()> {
 	pad_opt(i, parse_metadata, multi_line_padding)?;
 
 	zero_or_more(i, |i| {
-		ws(i)?;
-		prim_spec(i)
+		let prim_spec = prim_spec(i);
+		opt(i, |i| multi_line_padding(i))?;
+		prim_spec
 	})?;
-
-	ws(i)?;
 
 	Ok(())
 }

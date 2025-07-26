@@ -32,17 +32,103 @@ impl Path {
 			prop: INVALID_NODE_HANDLE,
 		}
 	}
+}
 
-	/// Returns true if this path is the [`Path::empty_path`].
+/// Querying paths.
+impl Path {
+	/// Returns true if this path is the [`Self::empty_path`].
 	pub fn is_empty(&self) -> bool {
-		self.prim == INVALID_NODE_HANDLE && self.prop == INVALID_NODE_HANDLE
+		*self == Self::empty_path()
 	}
 
-	/// Returns true if this path is the [`Path::absolute_root_path`].
+	/// Returns true if this path is the [`Self::absolute_root_path`].
 	pub fn is_absolute_root(&self) -> bool {
-		*self == Path::absolute_root_path()
+		*self == Self::absolute_root_path()
 	}
 
+	/// Returns whether the path identifies a prim.
+	pub fn is_prim_path(&self) -> bool {
+		self.prop == INVALID_NODE_HANDLE
+			&& self.prim != INVALID_NODE_HANDLE
+			&& ({
+				let prim_pool = PATH_PRIM_PART_POOL.read().unwrap();
+				let prim_node = prim_pool.get(self.prim).unwrap();
+				matches!(prim_node.data, PathNodeData::Prim { .. })
+			} || *self == Self::reflexive_relative_path())
+	}
+
+	/// Return the path that identifies this path's namespace parent.
+	///
+	/// Note that the parent path of a relative parent path (`..`) is a relative grandparent path (`../..`).
+	/// Use caution writing loops that walk to parent paths since relative paths have infinitely many ancestors.
+	/// To more safely traverse ancestor paths, consider using [`Self::ancestors_range`].
+	pub fn parent_path(&self) -> Self {
+		if self.is_empty() {
+			return Self::empty_path();
+		}
+
+		// If this is a property-like path, trim that first.
+		if self.prop != INVALID_NODE_HANDLE {
+			let prop_pool = PATH_PROP_PART_POOL.read().unwrap();
+			let prop_node = prop_pool.get(self.prop).unwrap();
+
+			return Self {
+				prim: self.prim,
+				prop: prop_node.parent,
+			};
+		}
+
+		// This is a prim-like path. If this is an absolute path (most common case)
+		// then it's just the parent path node. On the other hand if this path is a
+		// relative path, and is '.' or ends with '..', the logical parent path is
+		// made by appending a '..' component.
+		let prim_pool = PATH_PRIM_PART_POOL.read().unwrap();
+		let prim_node = prim_pool.get(self.prim).unwrap();
+
+		if prim_node.is_absolute_path()
+			|| (self.prim != RELATIVE_ROOT_NODE_HANDLE
+				&& match &prim_node.data {
+					PathNodeData::Prim { name } => name.as_str() != "..",
+					_ => true,
+				}) {
+			return Self {
+				prim: prim_node.parent,
+				prop: INVALID_NODE_HANDLE,
+			};
+		}
+
+		// Is relative root '.' or ends with '..'.
+		self.append_child(&tf::Token::new(".."))
+	}
+
+	/// Return a range for iterating over the ancestors of this path.
+	///
+	/// The range provides iteration over the prefixes of a path, ordered from longest to shortest.
+	/// Starting with the path itself and ending with a single element path, not including the empty/root path.
+	pub fn ancestors_range(&self) -> PathAncestorsRange {
+		PathAncestorsRange { path: self.clone() }
+	}
+
+	/// Returns the name of the prim, property or relational attribute identified by the path.
+	pub fn name(&self) -> String {
+		if self.prop != INVALID_NODE_HANDLE {
+			let prop_pool = PATH_PROP_PART_POOL.read().unwrap();
+			let prop_node = prop_pool.get(self.prop).unwrap();
+			return prop_node.name().to_string();
+		}
+
+		if self.prim != INVALID_NODE_HANDLE {
+			let prim_pool = PATH_PRIM_PART_POOL.read().unwrap();
+			let prim_node = prim_pool.get(self.prim).unwrap();
+			return prim_node.name().to_string();
+		}
+
+		String::new()
+	}
+}
+
+/// Creating new paths by modifying existing paths.
+impl Path {
 	/// Creates a path by appending an element for `child_name` to this path.
 	///
 	/// This path must be a prim path, the AbsoluteRootPath or the ReflexiveRelativePath.
@@ -177,62 +263,6 @@ impl Path {
 			),
 		}
 	}
-
-	/// Return the path that identifies this path's namespace parent.
-	pub fn parent_path(&self) -> Self {
-		if self.is_empty() {
-			return Self::empty_path();
-		}
-
-		// If this is a property-like path, trim that first.
-		if self.prop != INVALID_NODE_HANDLE {
-			let prop_pool = PATH_PROP_PART_POOL.read().unwrap();
-			let prop_node = prop_pool.get(self.prop).unwrap();
-
-			return Self {
-				prim: self.prim,
-				prop: prop_node.parent,
-			};
-		}
-
-		// This is a prim-like path. If this is an absolute path (most common case)
-		// then it's just the parent path node. On the other hand if this path is a
-		// relative path, and is '.' or ends with '..', the logical parent path is
-		// made by appending a '..' component.
-		let prim_pool = PATH_PRIM_PART_POOL.read().unwrap();
-		let prim_node = prim_pool.get(self.prim).unwrap();
-
-		if prim_node.is_absolute_path()
-			|| (self.prim != RELATIVE_ROOT_NODE_HANDLE
-				&& match &prim_node.data {
-					PathNodeData::Prim { name } => name.as_str() != "..",
-					_ => true,
-				}) {
-			return Self {
-				prim: prim_node.parent,
-				prop: INVALID_NODE_HANDLE,
-			};
-		}
-
-		// Is relative root '.' or ends with '..'.
-		self.append_child(&tf::Token::new(".."))
-	}
-
-	pub fn name(&self) -> String {
-		if self.prop != INVALID_NODE_HANDLE {
-			let prop_pool = PATH_PROP_PART_POOL.read().unwrap();
-			let prop_node = prop_pool.get(self.prop).unwrap();
-			return prop_node.name().to_string();
-		}
-
-		if self.prim != INVALID_NODE_HANDLE {
-			let prim_pool = PATH_PRIM_PART_POOL.read().unwrap();
-			let prim_node = prim_pool.get(self.prim).unwrap();
-			return prim_node.name().to_string();
-		}
-
-		"".to_string()
-	}
 }
 
 impl Default for Path {
@@ -253,8 +283,46 @@ impl std::fmt::Display for Path {
 	}
 }
 
+pub struct PathAncestorsRange {
+	path: Path,
+}
+
+impl std::iter::Iterator for PathAncestorsRange {
+	type Item = Path;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		if self.path.is_empty() {
+			return None;
+		}
+
+		let current_path = self.path.clone();
+
+		let prim_pool = PATH_PRIM_PART_POOL.read().unwrap();
+		let prop_pool = PATH_PROP_PART_POOL.read().unwrap();
+
+		let mut prim_handle = INVALID_NODE_HANDLE;
+		let mut prop_handle = INVALID_NODE_HANDLE;
+
+		if self.path.prop != INVALID_NODE_HANDLE {
+			prop_handle = prop_pool.get(self.path.prop).unwrap().parent;
+			prim_handle = self.path.prim;
+		} else if self.path.prim != INVALID_NODE_HANDLE {
+			let prim_node = prim_pool.get(self.path.prim).unwrap();
+			if prim_node.element_count() > 1 {
+				prim_handle = prim_node.parent;
+			}
+		}
+
+		self.path = Path {
+			prim: prim_handle,
+			prop: prop_handle,
+		};
+
+		Some(current_path)
+	}
+}
+
 #[cfg(test)]
-#[rustfmt::skip]
 mod tests {
 	use super::*;
 
@@ -276,9 +344,18 @@ mod tests {
 	#[test]
 	fn append_property() {
 		assert_eq!(p("/foo").append_property(&t("prop")), p("/foo.prop"));
-		assert_eq!(p("/foo").append_property(&t("prop:foo:bar")), p("/foo.prop:foo:bar"));
-		assert_eq!(p("/foo.prop").append_property(&t("prop2")), Path::empty_path());
-		assert_eq!(p("/foo.prop").append_property(&t("prop2:foo:bar")), Path::empty_path());
+		assert_eq!(
+			p("/foo").append_property(&t("prop:foo:bar")),
+			p("/foo.prop:foo:bar")
+		);
+		assert_eq!(
+			p("/foo.prop").append_property(&t("prop2")),
+			Path::empty_path()
+		);
+		assert_eq!(
+			p("/foo.prop").append_property(&t("prop2:foo:bar")),
+			Path::empty_path()
+		);
 	}
 
 	#[test]
@@ -289,6 +366,24 @@ mod tests {
 		assert_eq!(p("/foo.prop").parent_path(), p("/foo"));
 		assert_eq!(p("foo.prop").parent_path(), p("foo"));
 		assert_eq!(p("/foo.prop:bar").parent_path(), p("/foo"));
+	}
+
+	#[test]
+	fn ancestors_range() {
+		let path = p("/foo/bar/baz");
+		let mut ancestors = path.ancestors_range();
+		assert_eq!(ancestors.next(), Some(p("/foo/bar/baz")));
+		assert_eq!(ancestors.next(), Some(p("/foo/bar")));
+		assert_eq!(ancestors.next(), Some(p("/foo")));
+		assert_eq!(ancestors.next(), None);
+
+		let path = p("/foo/bar/baz.prop");
+		let mut ancestors = path.ancestors_range();
+		assert_eq!(ancestors.next(), Some(p("/foo/bar/baz.prop")));
+		assert_eq!(ancestors.next(), Some(p("/foo/bar/baz")));
+		assert_eq!(ancestors.next(), Some(p("/foo/bar")));
+		assert_eq!(ancestors.next(), Some(p("/foo")));
+		assert_eq!(ancestors.next(), None);
 	}
 
 	#[test]

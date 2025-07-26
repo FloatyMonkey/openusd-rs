@@ -8,6 +8,7 @@ pub mod vt;
 
 pub mod usd_geom;
 pub mod usd_lux;
+pub mod usd_skel;
 
 mod peg;
 mod usda;

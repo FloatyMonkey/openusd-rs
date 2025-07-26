@@ -243,6 +243,7 @@ fn main() -> io::Result<()> {
 	let schemas = vec![
 		["src/usd_geom/schema.usda", "src/usd_geom/generated.rs"],
 		["src/usd_lux/schema.usda", "src/usd_lux/generated.rs"],
+		["src/usd_skel/schema.usda", "src/usd_skel/generated.rs"],
 	];
 
 	for [in_path_str, out_path_str] in schemas {

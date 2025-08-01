@@ -64,20 +64,20 @@ impl Skeleton<'_> {
 	/// joint. It is not required that the name at the end of each path be
 	/// unique, but rather only that the paths themselves be unique.
 	pub fn joints_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.joints)
+		self.prim().attribute(&TOKENS.joints)
 	}
 
 	/// If authored, provides a unique name per joint. This may be
 	/// optionally set to provide better names when translating to DCC apps
 	/// that require unique joint names.
 	pub fn joint_names_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.joint_names)
+		self.prim().attribute(&TOKENS.joint_names)
 	}
 
 	/// Specifies the bind-pose transforms of each joint in
 	/// **world space**, in the ordering imposed by *joints*.
 	pub fn bind_transforms_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.bind_transforms)
+		self.prim().attribute(&TOKENS.bind_transforms)
 	}
 
 	/// Specifies the rest-pose transforms of each joint in
@@ -86,7 +86,7 @@ impl Skeleton<'_> {
 	/// bound animation source, or when that animation source only contains
 	/// animation for a subset of a Skeleton's joints.
 	pub fn rest_transforms_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.rest_transforms)
+		self.prim().attribute(&TOKENS.rest_transforms)
 	}
 }
 
@@ -112,27 +112,27 @@ impl SkelAnimation<'_> {
 	/// Skeleton primitives. The order of the joints as listed here may
 	/// vary from the order of joints on the Skeleton itself.
 	pub fn joints_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.joints)
+		self.prim().attribute(&TOKENS.joints)
 	}
 
 	/// Joint-local translations of all affected joints. Array length
 	/// should match the size of the *joints* attribute.
 	pub fn translations_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.translations)
+		self.prim().attribute(&TOKENS.translations)
 	}
 
 	/// Joint-local unit quaternion rotations of all affected joints,
 	/// in 32-bit precision. Array length should match the size of the
 	/// *joints* attribute.
 	pub fn rotations_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.rotations)
+		self.prim().attribute(&TOKENS.rotations)
 	}
 
 	/// Joint-local scales of all affected joints, in
 	/// 16 bit precision. Array length should match the size of the *joints*
 	/// attribute.
 	pub fn scales_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.scales)
+		self.prim().attribute(&TOKENS.scales)
 	}
 
 	/// Array of tokens identifying which blend shapes this
@@ -141,7 +141,7 @@ impl SkelAnimation<'_> {
 	/// UsdSkelBindingAPI. Note that blendShapes does not accept time-sampled
 	/// values.
 	pub fn blend_shapes_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.blend_shapes)
+		self.prim().attribute(&TOKENS.blend_shapes)
 	}
 
 	/// Array of weight values for each blend shape. Each weight value
@@ -149,7 +149,7 @@ impl SkelAnimation<'_> {
 	/// *blendShapes* token array, and therefore must have the same length as
 	/// *blendShapes.
 	pub fn blend_shape_weights_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.blend_shape_weights)
+		self.prim().attribute(&TOKENS.blend_shape_weights)
 	}
 }
 
@@ -173,21 +173,20 @@ impl SkelBindingAPI<'_> {
 
 	/// Animation source to be bound to Skeleton primitives at or
 	/// beneath the location at which this property is defined.
-	pub fn animation_source_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.skel_animation_source)
+	pub fn animation_source_rel(&self) -> usd::Relationship {
+		self.prim().relationship(&TOKENS.skel_animation_source)
 	}
 
 	/// Skeleton to be bound to this prim and its descendents that
 	/// possess a mapping and weighting to the joints of the identified
 	/// Skeleton.
-	pub fn skeleton_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.skel_skeleton)
+	pub fn skeleton_rel(&self) -> usd::Relationship {
+		self.prim().relationship(&TOKENS.skel_skeleton)
 	}
 
 	/// The skinningMethod specifies the skinning method for the prim.
 	pub fn skinning_method_attr(&self) -> usd::Attribute {
-		self.prim()
-			.get_attribute(&TOKENS.primvars_skel_skinning_method)
+		self.prim().attribute(&TOKENS.primvars_skel_skinning_method)
 	}
 
 	/// Encodes the bind-time world space transforms of the prim.
@@ -197,7 +196,7 @@ impl SkelBindingAPI<'_> {
 	/// transform is used instead.
 	pub fn geom_bind_transform_attr(&self) -> usd::Attribute {
 		self.prim()
-			.get_attribute(&TOKENS.primvars_skel_geom_bind_transform)
+			.attribute(&TOKENS.primvars_skel_geom_bind_transform)
 	}
 
 	/// An (optional) array of tokens defining the list of
@@ -206,7 +205,7 @@ impl SkelBindingAPI<'_> {
 	/// attribute. If undefined on a primitive, the primitive inherits the
 	/// value of the nearest ancestor prim, if any.
 	pub fn joints_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.skel_joints)
+		self.prim().attribute(&TOKENS.skel_joints)
 	}
 
 	/// Indices into the *joints* attribute of the closest
@@ -218,8 +217,7 @@ impl SkelBindingAPI<'_> {
 	/// See UsdGeomPrimvar for more information on interpolation and
 	/// elementSize.
 	pub fn joint_indices_attr(&self) -> usd::Attribute {
-		self.prim()
-			.get_attribute(&TOKENS.primvars_skel_joint_indices)
+		self.prim().attribute(&TOKENS.primvars_skel_joint_indices)
 	}
 
 	/// Weights for the joints that affect each point of a PointBased
@@ -229,8 +227,7 @@ impl SkelBindingAPI<'_> {
 	/// *jointWeights* must match that of *jointIndices*. See UsdGeomPrimvar
 	/// for more information on interpolation and elementSize.
 	pub fn joint_weights_attr(&self) -> usd::Attribute {
-		self.prim()
-			.get_attribute(&TOKENS.primvars_skel_joint_weights)
+		self.prim().attribute(&TOKENS.primvars_skel_joint_weights)
 	}
 
 	/// An array of tokens defining the order onto which blend shape
@@ -240,14 +237,14 @@ impl SkelBindingAPI<'_> {
 	/// is not inherited hierarchically, and is expected to be authored directly
 	/// on the skinnable primitive to which the blend shapes apply.
 	pub fn blend_shapes_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.skel_blend_shapes)
+		self.prim().attribute(&TOKENS.skel_blend_shapes)
 	}
 
 	/// Ordered list of all target blend shapes. This property is not
 	/// inherited hierarchically, and is expected to be authored directly on
 	/// the skinnable primitive to which the the blend shapes apply.
-	pub fn blend_shape_targets_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.skel_blend_shape_targets)
+	pub fn blend_shape_targets_rel(&self) -> usd::Relationship {
+		self.prim().relationship(&TOKENS.skel_blend_shape_targets)
 	}
 }
 
@@ -271,13 +268,13 @@ impl BlendShape<'_> {
 	/// **Required property**. Position offsets which, when added to the
 	/// base pose, provides the target shape.
 	pub fn offsets_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.offsets)
+		self.prim().attribute(&TOKENS.offsets)
 	}
 
 	/// **Required property**. Normal offsets which, when added to the
 	/// base pose, provides the normals of the target shape.
 	pub fn normal_offsets_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.normal_offsets)
+		self.prim().attribute(&TOKENS.normal_offsets)
 	}
 
 	/// **Optional property**. Indices into the original mesh that
@@ -285,7 +282,7 @@ impl BlendShape<'_> {
 	/// authored, the number of elements must be equal to the number of elements
 	/// in the *offsets* array.
 	pub fn point_indices_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.point_indices)
+		self.prim().attribute(&TOKENS.point_indices)
 	}
 }
 

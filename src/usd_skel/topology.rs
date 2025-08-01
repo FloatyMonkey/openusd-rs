@@ -31,10 +31,7 @@ impl Topology {
 	/// paths as tokens. If an array of paths is already available, prefer
 	/// using [`Self::from_paths`] for better performance.
 	pub fn from_tokens(tokens: &[tf::Token]) -> Self {
-		let paths = tokens
-			.iter()
-			.map(|t| sdf::Path::from(t.as_str()))
-			.collect::<Vec<_>>();
+		let paths = tokens.iter().map(|t| t.as_str().into()).collect::<Vec<_>>();
 
 		Self::from_paths(&paths)
 	}
@@ -128,14 +125,14 @@ mod tests {
 	use super::*;
 
 	#[test]
-	fn from_paths() {
-		let topology = Topology::from_paths(&[
-			sdf::Path::from("/a"),
-			sdf::Path::from("/a/b"),
-			sdf::Path::from("/a/b/c"),
-			sdf::Path::from("/a/d"),
-			sdf::Path::from("/e"),
-			sdf::Path::from("/e/f/g"),
+	fn from_tokens() {
+		let topology = Topology::from_tokens(&[
+			tf::Token::new("/a"),
+			tf::Token::new("/a/b"),
+			tf::Token::new("/a/b/c"),
+			tf::Token::new("/a/d"),
+			tf::Token::new("/e"),
+			tf::Token::new("/e/f/g"),
 		]);
 
 		assert_eq!(topology.num_joints(), 6);

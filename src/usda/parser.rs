@@ -405,8 +405,8 @@ fn attribute_variability<'a>(i: &mut In<'a>) -> PResult<sdf::Variability> {
 	)
 }
 
-fn property_spec<'a>(i: &mut In<'a>) -> PResult<()> {
-	let is_custom = opt(i, |i| symbol(i, "custom").map(|_| true))?.unwrap_or(false);
+fn attribute_spec<'a>(i: &mut In<'a>) -> PResult<()> {
+	let is_custom = opt(i, |i| symbol(i, "custom"))?.is_some();
 
 	let variability = opt(i, |i| terminated(i, attribute_variability, token_separator))?;
 
@@ -464,9 +464,61 @@ fn property_spec<'a>(i: &mut In<'a>) -> PResult<()> {
 
 	i.ctx.add_spec(path, spec);
 
-	println!("Parsed property: {} {}", type_name_str, name);
+	println!("Parsed attribute: {} {}", type_name_str, name);
 
 	Ok(())
+}
+
+fn relationship_type<'a>(i: &mut In<'a>) -> PResult<(bool, bool)> {
+	let is_custom = opt(i, |i| symbol(i, "custom"))?.is_some();
+	let is_varying = opt(i, |i| symbol(i, "varying"))?.is_some();
+
+	symbol(i, "rel")?;
+
+	Ok((is_custom, is_varying))
+}
+
+fn relationship_spec<'a>(i: &mut In<'a>) -> PResult<()> {
+	let (is_custom, is_varying) = relationship_type(i)?;
+
+	let name = lexeme(i, identifier)?;
+	let name_token = tf::Token::new(name);
+
+	let metadata = opt(i, parse_metadata)?;
+
+	let mut spec = Spec::new(sdf::SpecType::Relationship);
+	spec.add(&FIELD_KEYS.custom, is_custom);
+
+	if is_varying {
+		spec.add(&FIELD_KEYS.variability, sdf::Variability::Varying);
+	}
+
+	if let Some(meta) = metadata {
+		if let Some(documentation) = meta.get("doc") {
+			spec.add(&FIELD_KEYS.documentation, documentation.clone());
+		}
+
+		if let Some(custom_data) = meta.get("customData") {
+			spec.add(&FIELD_KEYS.custom_data, custom_data.clone());
+		}
+	}
+
+	let parent_path = &i.ctx.current_path;
+	let path = parent_path.append_property(&name_token);
+
+	if let Some(properties) = i.ctx.parent_properties_stack.last_mut() {
+		properties.push(name_token.clone());
+	}
+
+	i.ctx.add_spec(path, spec);
+
+	println!("Parsed relationship: {}", name);
+
+	Ok(())
+}
+
+fn property_spec<'a>(i: &mut In<'a>) -> PResult<()> {
+	sor!(i, relationship_spec, attribute_spec)
 }
 
 fn specifier<'a>(i: &mut In<'a>) -> PResult<sdf::Specifier> {

@@ -177,13 +177,13 @@ impl XformOp {
 		}
 
 		let op_order = prim
-			.get_attribute(&TOKENS.xform_op_order)
+			.attribute(&TOKENS.xform_op_order)
 			.get::<Vec<tf::Token>>();
 
 		for op in op_order.iter().rev() {
 			let op_type =
 				XformOpType::try_from(op.as_str().trim_start_matches("xformOp:")).unwrap();
-			if let Some(op_value) = prim.get_attribute(&op).get_value() {
+			if let Some(op_value) = prim.attribute(&op).get_value() {
 				if let Some(mat) = Self::get_op_transform(op_type, op_value, false) {
 					matrix *= mat;
 				}

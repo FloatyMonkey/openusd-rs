@@ -21,6 +21,7 @@ struct PropertyDef {
 	name: String,
 	api_name: String,
 	documentation: String,
+	is_relationship: bool,
 }
 
 fn parse_schema_file(path: &Path) -> io::Result<Vec<ClassDef>> {
@@ -61,7 +62,7 @@ fn process_prim(prim: &usd::Prim, class_defs: &mut Vec<ClassDef>) {
 				prim.metadata::<Vec<tf::Token>>(&sdf::CHILDREN_KEYS.property_children)
 			{
 				for prop_name in prop_names {
-					let prop = prim.get_attribute(&prop_name);
+					let prop = prim.property(&prop_name);
 
 					// TODO: apiName should be of type tf::Token but parser detects it as String for now
 					let api_name = prop
@@ -70,10 +71,13 @@ fn process_prim(prim: &usd::Prim, class_defs: &mut Vec<ClassDef>) {
 						.and_then(|v| v.get::<String>())
 						.unwrap_or_else(|| prop_name.to_string());
 
+					let is_relationship = prop.spec_type() == Some(sdf::SpecType::Relationship);
+
 					properties.push(PropertyDef {
 						name: prop_name.to_string(),
 						api_name,
 						documentation: prop.documentation(),
+						is_relationship,
 					});
 				}
 			}
@@ -180,15 +184,27 @@ fn generate_class(class: &ClassDef) -> String {
 
 	for prop in &class.properties {
 		write_documentation(&mut code, &prop.documentation, "\t");
-		code.push_str(&format!(
-			"\tpub fn {}_attr(&self) -> usd::Attribute {{\n",
-			snakecase_from_camelcase(&prop.api_name)
-		));
-		code.push_str(&format!(
-			"\t\tself.prim().get_attribute(&TOKENS.{})\n",
-			snakecase_from_camelcase(&prop.name)
-		));
-		code.push_str("\t}\n\n");
+		if prop.is_relationship {
+			code.push_str(&format!(
+				"\tpub fn {}_rel(&self) -> usd::Relationship {{\n",
+				snakecase_from_camelcase(&prop.api_name)
+			));
+			code.push_str(&format!(
+				"\t\tself.prim().relationship(&TOKENS.{})\n",
+				snakecase_from_camelcase(&prop.name)
+			));
+			code.push_str("\t}\n\n");
+		} else {
+			code.push_str(&format!(
+				"\tpub fn {}_attr(&self) -> usd::Attribute {{\n",
+				snakecase_from_camelcase(&prop.api_name)
+			));
+			code.push_str(&format!(
+				"\t\tself.prim().attribute(&TOKENS.{})\n",
+				snakecase_from_camelcase(&prop.name)
+			));
+			code.push_str("\t}\n\n");
+		}
 	}
 
 	code.push_str("}\n\n");

@@ -13,14 +13,6 @@ pub struct Value {
 }
 
 impl Value {
-	pub fn get_unchecked<T: ValueType>(&self) -> T {
-		T::load(&self.store).unwrap()
-	}
-
-	pub fn get<T: ValueType>(&self) -> Option<T> {
-		T::load(&self.store)
-	}
-
 	pub fn new<T: ValueType>(value: T) -> Self {
 		Value {
 			store: value.store(),
@@ -35,6 +27,15 @@ impl Value {
 
 	pub fn is_empty(&self) -> bool {
 		matches!(self.store, ValueStore::Empty)
+	}
+
+	pub fn get<T: ValueType>(&self) -> Option<T> {
+		T::load(&self.store)
+	}
+
+	#[track_caller]
+	pub fn get_unchecked<T: ValueType>(&self) -> T {
+		T::load(&self.store).unwrap()
 	}
 }
 

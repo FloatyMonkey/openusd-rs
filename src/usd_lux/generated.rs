@@ -33,26 +33,26 @@ impl LightAPI<'_> {
 
 	/// Scales the brightness of the light linearly.
 	pub fn intensity_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.inputs_intensity)
+		self.prim().attribute(&TOKENS.inputs_intensity)
 	}
 
 	/// Scales the brightness of the light exponentially as a power
 	/// of 2 (similar to an F-stop control over exposure). The result
 	/// is multiplied against the intensity.
 	pub fn exposure_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.inputs_exposure)
+		self.prim().attribute(&TOKENS.inputs_exposure)
 	}
 
 	/// A multiplier for the effect of this light on the diffuse
 	/// response of materials. This is a non-physical control.
 	pub fn diffuse_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.inputs_diffuse)
+		self.prim().attribute(&TOKENS.inputs_diffuse)
 	}
 
 	/// A multiplier for the effect of this light on the specular
 	/// response of materials. This is a non-physical control.
 	pub fn specular_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.inputs_specular)
+		self.prim().attribute(&TOKENS.inputs_specular)
 	}
 
 	/// Normalizes the emission such that the power of the light
@@ -63,19 +63,19 @@ impl LightAPI<'_> {
 	/// of the light, by causing the total illumination provided by a light to
 	/// not vary with the area or angular size of the light.
 	pub fn normalize_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.inputs_normalize)
+		self.prim().attribute(&TOKENS.inputs_normalize)
 	}
 
 	/// The color of emitted light, in the rendering color space.
 	/// This color is just multiplied with the emission.
 	pub fn color_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.inputs_color)
+		self.prim().attribute(&TOKENS.inputs_color)
 	}
 
 	/// Enables using colorTemperature.
 	pub fn enable_color_temperature_attr(&self) -> usd::Attribute {
 		self.prim()
-			.get_attribute(&TOKENS.inputs_enable_color_temperature)
+			.attribute(&TOKENS.inputs_enable_color_temperature)
 	}
 
 	/// Color temperature, in degrees Kelvin, representing the
@@ -84,7 +84,7 @@ impl LightAPI<'_> {
 	/// is from 1000 to 10000. Only takes effect when
 	/// enableColorTemperature is set to true.
 	pub fn color_temperature_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.inputs_color_temperature)
+		self.prim().attribute(&TOKENS.inputs_color_temperature)
 	}
 }
 
@@ -141,7 +141,7 @@ impl DiskLight<'_> {
 
 	/// Radius of the disk.
 	pub fn radius_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.inputs_radius)
+		self.prim().attribute(&TOKENS.inputs_radius)
 	}
 }
 
@@ -167,17 +167,17 @@ impl RectLight<'_> {
 
 	/// Width of the rectangle, in the local X axis.
 	pub fn width_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.inputs_width)
+		self.prim().attribute(&TOKENS.inputs_width)
 	}
 
 	/// Height of the rectangle, in the local Y axis.
 	pub fn height_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.inputs_height)
+		self.prim().attribute(&TOKENS.inputs_height)
 	}
 
 	/// A color texture to use on the rectangle.
 	pub fn texture_file_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.inputs_texture_file)
+		self.prim().attribute(&TOKENS.inputs_texture_file)
 	}
 }
 
@@ -199,7 +199,7 @@ impl SphereLight<'_> {
 
 	/// Radius of the sphere.
 	pub fn radius_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.inputs_radius)
+		self.prim().attribute(&TOKENS.inputs_radius)
 	}
 
 	/// A hint that this light can be treated as a 'point'
@@ -207,7 +207,7 @@ impl SphereLight<'_> {
 	/// benefit from non-area lighting. Renderers that only support
 	/// area lights can disregard this.
 	pub fn treat_as_point_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.treat_as_point)
+		self.prim().attribute(&TOKENS.treat_as_point)
 	}
 }
 
@@ -235,7 +235,7 @@ impl DomeLight<'_> {
 	/// A color texture to use on the dome, such as an HDR (high
 	/// dynamic range) texture intended for IBL (image based lighting).
 	pub fn texture_file_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.inputs_texture_file)
+		self.prim().attribute(&TOKENS.inputs_texture_file)
 	}
 
 	/// Specifies the parameterization of the color map file.
@@ -252,19 +252,19 @@ impl DomeLight<'_> {
 	/// - cubeMapVerticalCross: A cube map with faces laid out as a
 	/// vertical cross.
 	pub fn texture_format_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.inputs_texture_format)
+		self.prim().attribute(&TOKENS.inputs_texture_format)
 	}
 
 	/// Optional portals to guide light sampling.
-	pub fn portals_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.portals)
+	pub fn portals_rel(&self) -> usd::Relationship {
+		self.prim().relationship(&TOKENS.portals)
 	}
 
 	/// The radius of guide geometry to use to visualize the dome light.
 	/// The default is 1 km for scenes whose metersPerUnit is the USD default of
 	/// 0.01 (i.e., 1 world unit is 1 cm).
 	pub fn guide_radius_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.guide_radius)
+		self.prim().attribute(&TOKENS.guide_radius)
 	}
 }
 

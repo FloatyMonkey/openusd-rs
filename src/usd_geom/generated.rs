@@ -22,11 +22,11 @@ impl Imageable<'_> {
 	}
 
 	pub fn visibility_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.visibility)
+		self.prim().attribute(&TOKENS.visibility)
 	}
 
 	pub fn purpose_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.purpose)
+		self.prim().attribute(&TOKENS.purpose)
 	}
 }
 
@@ -46,7 +46,7 @@ impl Xformable<'_> {
 	}
 
 	pub fn xform_op_order_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.xform_op_order)
+		self.prim().attribute(&TOKENS.xform_op_order)
 	}
 }
 
@@ -98,11 +98,11 @@ impl PointBased<'_> {
 	}
 
 	pub fn points_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.points)
+		self.prim().attribute(&TOKENS.points)
 	}
 
 	pub fn normals_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.normals)
+		self.prim().attribute(&TOKENS.normals)
 	}
 }
 
@@ -122,11 +122,11 @@ impl Mesh<'_> {
 	}
 
 	pub fn face_vertex_indices_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.face_vertex_indices)
+		self.prim().attribute(&TOKENS.face_vertex_indices)
 	}
 
 	pub fn face_vertex_counts_attr(&self) -> usd::Attribute {
-		self.prim().get_attribute(&TOKENS.face_vertex_counts)
+		self.prim().attribute(&TOKENS.face_vertex_counts)
 	}
 }
 

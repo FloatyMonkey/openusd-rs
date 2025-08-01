@@ -1,4 +1,4 @@
-use super::{Attribute, Object};
+use super::{Attribute, Object, Property, Relationship};
 use crate::{sdf, tf, usd};
 
 /// [`usd::Prim`] is the sole persistent scenegraph object on a [`usd::Stage`],
@@ -19,7 +19,25 @@ impl<'a> Prim<'a> {
 			.flatten()
 	}
 
-	pub fn get_attribute<'b>(&'b self, name: &tf::Token) -> Attribute<'b> {
+	pub fn children<'b>(&'b self) -> ChildrenIter<'b> {
+		ChildrenIter::new(self.stage(), self.path())
+	}
+
+	pub fn type_name(&self) -> tf::Token {
+		self.metadata(&sdf::FIELD_KEYS.type_name)
+			.unwrap_or_default()
+	}
+
+	/// Return a [`usd::Property`] with the given `name`.
+	pub fn property<'b>(&'b self, name: &tf::Token) -> Property<'b> {
+		Property::new(self.stage(), self.path().append_property(name))
+	}
+}
+
+/// Attributes
+impl<'a> Prim<'a> {
+	/// Return a [`usd::Attribute`] with the given `name`.
+	pub fn attribute<'b>(&'b self, name: &tf::Token) -> Attribute<'b> {
 		Attribute::new(self.stage(), self.path().append_property(name))
 	}
 
@@ -29,14 +47,13 @@ impl<'a> Prim<'a> {
 			.get(&self.path().append_property(name), &sdf::FIELD_KEYS.default)
 			.is_some()
 	}
+}
 
-	pub fn children<'b>(&'b self) -> ChildrenIter<'b> {
-		ChildrenIter::new(self.stage(), self.path())
-	}
-
-	pub fn type_name(&self) -> tf::Token {
-		self.metadata(&sdf::FIELD_KEYS.type_name)
-			.unwrap_or_default()
+/// Relationships
+impl<'a> Prim<'a> {
+	/// Return a [`usd::Relationship`] with the given `name`.
+	pub fn relationship<'b>(&'b self, name: &tf::Token) -> Relationship<'b> {
+		Relationship::new(self.stage(), self.path().append_property(name))
 	}
 }
 

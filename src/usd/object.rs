@@ -54,4 +54,9 @@ impl<'a> Object<'a> {
 		self.metadata(&sdf::FIELD_KEYS.custom_data)
 			.unwrap_or_default()
 	}
+
+	#[doc(hidden)]
+	pub fn spec_type(&self) -> Option<sdf::SpecType> {
+		self.stage().data().spec_type(self.path())
+	}
 }

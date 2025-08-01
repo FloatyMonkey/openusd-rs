@@ -98,7 +98,20 @@ impl Path {
 		}
 
 		// Is relative root '.' or ends with '..'.
-		self.append_child(&tf::Token::new(".."))
+
+		let parent = prim_node.parent;
+		drop(prim_pool);
+
+		Self {
+			prim: find_or_create_path_node(
+				&PATH_PRIM_PART_POOL,
+				Some(parent),
+				&PathNodeData::Prim {
+					name: tf::Token::new(".."),
+				},
+			),
+			prop: INVALID_NODE_HANDLE,
+		}
 	}
 
 	/// Return a range for iterating over the ancestors of this path.

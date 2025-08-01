@@ -47,8 +47,7 @@ fn dot_dot<'a>(i: &mut In<'a>) -> PResult<()> {
 	if i.ctx.path.is_empty() {
 		i.ctx.path = sdf::Path::reflexive_relative_path();
 	}
-	// TODO: Enabling the line below gets stuck in an infinit loop
-	// i.context.path = i.context.path.parent_path();
+	i.ctx.path = i.ctx.path.parent_path();
 	Ok(())
 }
 
@@ -209,15 +208,15 @@ mod tests {
 		assert!(run_parse("my_identifier").is_ok());
 		assert!(run_parse("prim.property").is_ok());
 		assert!(run_parse("prim.prop:subprop:detail").is_ok());
-		//assert!(run_parse("..").is_ok());
-		//assert!(run_parse("../../relative/path").is_ok());
+		assert!(run_parse("..").is_ok());
+		assert!(run_parse("../../relative/path").is_ok());
 		assert!(run_parse("prim{var=val}").is_ok());
 		assert!(run_parse("prim{ var = val }").is_ok());
 		assert!(run_parse("prim{set=}").is_ok());
 		assert!(run_parse("prim{ set = }").is_ok());
 		assert!(run_parse("prim/ident{set=val}.prop").is_ok());
 		assert!(run_parse("/p1/p2{v=a}{v=b}/p3.prop:name").is_ok());
-		//assert!(run_parse("../p1{v=a}/p2.prop").is_ok());
-		//assert!(run_parse("../../../foo_123/bar_456{variant=name}{foo=bar}.prop_name:sub").is_ok());
+		assert!(run_parse("../p1{v=a}/p2.prop").is_ok());
+		assert!(run_parse("../../../foo_123/bar_456{variant=name}{foo=bar}.prop_name:sub").is_ok());
 	}
 }

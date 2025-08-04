@@ -34,3 +34,19 @@ class Mesh "Mesh" (
     int[] faceVertexIndices
     int[] faceVertexCounts
 }
+
+class PointInstancer "PointInstancer" (
+    inherits = </Boundable>
+) {
+    rel prototypes
+    int[] protoIndices
+    int64[] ids
+    point3f[] positions
+    quath[] orientations
+    quatf[] orientationsf
+    float3[] scales
+    vector3f[] velocities
+    vector3f[] accelerations
+    vector3f[] angularVelocities
+    int64[] invisibleIds = []
+}

@@ -4,11 +4,22 @@
 use crate::{declare_public_tokens, sdf, tf, usd};
 
 declare_public_tokens!(Tokens, TOKENS, [
+	accelerations: "accelerations",
+	angular_velocities: "angularVelocities",
 	face_vertex_counts: "faceVertexCounts",
 	face_vertex_indices: "faceVertexIndices",
+	ids: "ids",
+	invisible_ids: "invisibleIds",
 	normals: "normals",
+	orientations: "orientations",
+	orientationsf: "orientationsf",
 	points: "points",
+	positions: "positions",
+	proto_indices: "protoIndices",
+	prototypes: "prototypes",
 	purpose: "purpose",
+	scales: "scales",
+	velocities: "velocities",
 	visibility: "visibility",
 	xform_op_order: "xformOpOrder"
 ]);
@@ -28,6 +39,7 @@ impl Imageable<'_> {
 	pub fn purpose_attr(&self) -> usd::Attribute {
 		self.prim().attribute(&TOKENS.purpose)
 	}
+
 }
 
 impl<'a> std::ops::Deref for Imageable<'a> {
@@ -48,6 +60,7 @@ impl Xformable<'_> {
 	pub fn xform_op_order_attr(&self) -> usd::Attribute {
 		self.prim().attribute(&TOKENS.xform_op_order)
 	}
+
 }
 
 impl<'a> std::ops::Deref for Xformable<'a> {
@@ -64,6 +77,7 @@ impl Boundable<'_> {
 	pub fn define(stage: &usd::Stage, path: impl Into<sdf::Path>) -> Boundable {
 		Boundable(usd::SchemaBase::new(stage.prim_at_path(path)))
 	}
+
 }
 
 impl<'a> std::ops::Deref for Boundable<'a> {
@@ -80,6 +94,7 @@ impl Gprim<'_> {
 	pub fn define(stage: &usd::Stage, path: impl Into<sdf::Path>) -> Gprim {
 		Gprim(usd::SchemaBase::new(stage.prim_at_path(path)))
 	}
+
 }
 
 impl<'a> std::ops::Deref for Gprim<'a> {
@@ -104,6 +119,7 @@ impl PointBased<'_> {
 	pub fn normals_attr(&self) -> usd::Attribute {
 		self.prim().attribute(&TOKENS.normals)
 	}
+
 }
 
 impl<'a> std::ops::Deref for PointBased<'a> {
@@ -128,10 +144,72 @@ impl Mesh<'_> {
 	pub fn face_vertex_counts_attr(&self) -> usd::Attribute {
 		self.prim().attribute(&TOKENS.face_vertex_counts)
 	}
+
 }
 
 impl<'a> std::ops::Deref for Mesh<'a> {
 	type Target = PointBased<'a>;
+	fn deref(&self) -> &Self::Target {
+		unsafe { std::mem::transmute(self) }
+	}
+}
+
+#[repr(transparent)]
+pub struct PointInstancer<'a>(usd::SchemaBase<'a>);
+
+impl PointInstancer<'_> {
+	pub fn define(stage: &usd::Stage, path: impl Into<sdf::Path>) -> PointInstancer {
+		PointInstancer(usd::SchemaBase::new(stage.prim_at_path(path)))
+	}
+
+	pub fn prototypes_rel(&self) -> usd::Relationship {
+		self.prim().relationship(&TOKENS.prototypes)
+	}
+
+	pub fn proto_indices_attr(&self) -> usd::Attribute {
+		self.prim().attribute(&TOKENS.proto_indices)
+	}
+
+	pub fn ids_attr(&self) -> usd::Attribute {
+		self.prim().attribute(&TOKENS.ids)
+	}
+
+	pub fn positions_attr(&self) -> usd::Attribute {
+		self.prim().attribute(&TOKENS.positions)
+	}
+
+	pub fn orientations_attr(&self) -> usd::Attribute {
+		self.prim().attribute(&TOKENS.orientations)
+	}
+
+	pub fn orientationsf_attr(&self) -> usd::Attribute {
+		self.prim().attribute(&TOKENS.orientationsf)
+	}
+
+	pub fn scales_attr(&self) -> usd::Attribute {
+		self.prim().attribute(&TOKENS.scales)
+	}
+
+	pub fn velocities_attr(&self) -> usd::Attribute {
+		self.prim().attribute(&TOKENS.velocities)
+	}
+
+	pub fn accelerations_attr(&self) -> usd::Attribute {
+		self.prim().attribute(&TOKENS.accelerations)
+	}
+
+	pub fn angular_velocities_attr(&self) -> usd::Attribute {
+		self.prim().attribute(&TOKENS.angular_velocities)
+	}
+
+	pub fn invisible_ids_attr(&self) -> usd::Attribute {
+		self.prim().attribute(&TOKENS.invisible_ids)
+	}
+
+}
+
+impl<'a> std::ops::Deref for PointInstancer<'a> {
+	type Target = Boundable<'a>;
 	fn deref(&self) -> &Self::Target {
 		unsafe { std::mem::transmute(self) }
 	}

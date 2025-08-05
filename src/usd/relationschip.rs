@@ -11,7 +11,6 @@ impl<'a> Relationship<'a> {
 	}
 }
 
-
 impl<'a> std::ops::Deref for Relationship<'a> {
 	type Target = Property<'a>;
 	fn deref(&self) -> &Self::Target {

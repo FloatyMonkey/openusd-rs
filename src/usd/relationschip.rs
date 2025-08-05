@@ -11,6 +11,23 @@ impl<'a> Relationship<'a> {
 	}
 }
 
+impl<'a> Relationship<'a> {
+	pub fn get_targets(&self) -> Vec<sdf::Path> {
+		let property = &self.0;
+
+		// Get the raw SdfPath of the property
+		let prop_path = property.path();
+
+		// Get the owning prim
+		let prim = property.prim();
+
+		// Get the owning SdfLayer or Dictionary
+		let dict = prim.fields();
+
+	
+  }
+}
+
 impl<'a> std::ops::Deref for Relationship<'a> {
 	type Target = Property<'a>;
 	fn deref(&self) -> &Self::Target {

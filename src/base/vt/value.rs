@@ -102,6 +102,8 @@ pub enum ValueStore {
 	PayloadListOp(sdf::PayloadListOp),
 
 	Path(sdf::Path),
+  PathArray(Array<sdf::Path>),
+
 	AssetPath(sdf::AssetPath),
 
 	Specifier(sdf::Specifier),

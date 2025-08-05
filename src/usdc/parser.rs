@@ -817,24 +817,24 @@ impl sdf::AbstractData for UsdcFile {
 			Type::Matrix2d => read_pod::<gf::Matrix2d>(&mut cursor).into(),
 			Type::Matrix3d => read_pod::<gf::Matrix3d>(&mut cursor).into(),
 			Type::Matrix4d => read_pod::<gf::Matrix4d>(&mut cursor).into(),
-      
-      Type::PathVector => {
-          let indices = Vec::<Index>::read(self, &mut cursor);
-          let vector = indices
-              .iter()
-              .map(|i| self.paths[*i as usize].clone())
-              .collect::<Vec<_>>();
-          vt::Value::new(vector)
-      }
-      
-      Type::Path if value.is_array() => {
-          let indices = Vec::<Index>::read(self, &mut cursor);
-          let vector = indices
-              .iter()
-              .map(|i| self.paths[*i as usize].clone())
-              .collect::<Vec<_>>();
-          vt::Value::new(vector)
-      }
+
+			Type::PathVector => {
+				let indices = Vec::<Index>::read(self, &mut cursor);
+				let vector = indices
+					.iter()
+					.map(|i| self.paths[*i as usize].clone())
+					.collect::<Vec<_>>();
+				vt::Value::new(vector)
+			}
+
+			//Type::Path if value.is_array() => {
+			//	let indices = Vec::<Index>::read(self, &mut cursor);
+			//	let vector = indices
+			//		.iter()
+			//		.map(|i| self.paths[*i as usize].clone())
+			//		.collect::<Vec<_>>();
+			//	vt::Value::new(vector)
+			//}
 
 			Type::TokenVector => {
 				let indices = Vec::<Index>::read(self, &mut cursor);
@@ -844,16 +844,14 @@ impl sdf::AbstractData for UsdcFile {
 					.collect::<Vec<_>>();
 				vt::Value::new(vector)
 			}
-      //unsure if needed
-			//Type::Token if value.is_array() => {
-			//	let indices = Vec::<Index>::read(self, &mut cursor);
-			//	let vector = indices
-			//		.iter()
-			//		.map(|i| self.tokens[*i as usize].clone())
-			//		.collect::<Vec<_>>();
-			//	vt::Value::new(vector)
-			//}
-
+			Type::Token if value.is_array() => {
+				let indices = Vec::<Index>::read(self, &mut cursor);
+				let vector = indices
+					.iter()
+					.map(|i| self.tokens[*i as usize].clone())
+					.collect::<Vec<_>>();
+				vt::Value::new(vector)
+			}
 			Type::IntListOp => sdf::IntListOp::read(self, &mut cursor).into(),
 			Type::UIntListOp => sdf::UIntListOp::read(self, &mut cursor).into(),
 			Type::Int64ListOp => sdf::Int64ListOp::read(self, &mut cursor).into(),

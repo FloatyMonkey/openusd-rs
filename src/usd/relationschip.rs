@@ -23,9 +23,7 @@ impl<'a> Relationship<'a> {
 
 		// Get the owning SdfLayer or Dictionary
 		let dict = prim.fields();
-
-	
-  }
+	}
 }
 
 impl<'a> std::ops::Deref for Relationship<'a> {

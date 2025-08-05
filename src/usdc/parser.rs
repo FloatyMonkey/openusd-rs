@@ -835,7 +835,6 @@ impl sdf::AbstractData for UsdcFile {
 			//		.collect::<Vec<_>>();
 			//	vt::Value::new(vector)
 			//}
-
 			Type::TokenVector => {
 				let indices = Vec::<Index>::read(self, &mut cursor);
 				let vector = indices

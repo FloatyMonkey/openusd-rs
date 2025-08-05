@@ -24,7 +24,7 @@ impl<'a> Relationship<'a> {
 		// Get the owning SdfLayer or Dictionary
 		let dict = prim.fields();
 
-    prop_path
+		prop_path
 	}
 }
 

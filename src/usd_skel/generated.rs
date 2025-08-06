@@ -29,7 +29,7 @@ declare_public_tokens!(Tokens, TOKENS, [
 
 /// Boundable prim type used to identify a scope beneath which
 /// skeletally-posed primitives are defined.
-/// 
+///
 /// A SkelRoot must be defined at or above a skinned primitive for any skinning
 /// behaviors in UsdSkel.
 #[repr(transparent)]
@@ -39,7 +39,6 @@ impl SkelRoot<'_> {
 	pub fn define(stage: &usd::Stage, path: impl Into<sdf::Path>) -> SkelRoot {
 		SkelRoot(usd::SchemaBase::new(stage.prim_at_path(path)))
 	}
-
 }
 
 impl<'a> std::ops::Deref for SkelRoot<'a> {
@@ -69,7 +68,7 @@ impl Skeleton<'_> {
 	}
 
 	/// If authored, provides a unique name per joint. This may be
-	/// optionally set to provide better names when translating to DCC apps 
+	/// optionally set to provide better names when translating to DCC apps
 	/// that require unique joint names.
 	pub fn joint_names_attr(&self) -> usd::Attribute {
 		self.prim().attribute(&TOKENS.joint_names)
@@ -89,7 +88,6 @@ impl Skeleton<'_> {
 	pub fn rest_transforms_attr(&self) -> usd::Attribute {
 		self.prim().attribute(&TOKENS.rest_transforms)
 	}
-
 }
 
 impl<'a> std::ops::Deref for Skeleton<'a> {
@@ -117,21 +115,21 @@ impl SkelAnimation<'_> {
 		self.prim().attribute(&TOKENS.joints)
 	}
 
-	/// Joint-local translations of all affected joints. Array length 
+	/// Joint-local translations of all affected joints. Array length
 	/// should match the size of the *joints* attribute.
 	pub fn translations_attr(&self) -> usd::Attribute {
 		self.prim().attribute(&TOKENS.translations)
 	}
 
-	/// Joint-local unit quaternion rotations of all affected joints, 
-	/// in 32-bit precision. Array length should match the size of the 
+	/// Joint-local unit quaternion rotations of all affected joints,
+	/// in 32-bit precision. Array length should match the size of the
 	/// *joints* attribute.
 	pub fn rotations_attr(&self) -> usd::Attribute {
 		self.prim().attribute(&TOKENS.rotations)
 	}
 
 	/// Joint-local scales of all affected joints, in
-	/// 16 bit precision. Array length should match the size of the *joints* 
+	/// 16 bit precision. Array length should match the size of the *joints*
 	/// attribute.
 	pub fn scales_attr(&self) -> usd::Attribute {
 		self.prim().attribute(&TOKENS.scales)
@@ -153,7 +151,6 @@ impl SkelAnimation<'_> {
 	pub fn blend_shape_weights_attr(&self) -> usd::Attribute {
 		self.prim().attribute(&TOKENS.blend_shape_weights)
 	}
-
 }
 
 impl<'a> std::ops::Deref for SkelAnimation<'a> {
@@ -198,13 +195,14 @@ impl SkelBindingAPI<'_> {
 	/// down to all the leaf gprims. If this transform is unset, an identity
 	/// transform is used instead.
 	pub fn geom_bind_transform_attr(&self) -> usd::Attribute {
-		self.prim().attribute(&TOKENS.primvars_skel_geom_bind_transform)
+		self.prim()
+			.attribute(&TOKENS.primvars_skel_geom_bind_transform)
 	}
 
 	/// An (optional) array of tokens defining the list of
 	/// joints to which jointIndices apply. If not defined, jointIndices applies
 	/// to the ordered list of joints defined in the bound Skeleton's *joints*
-	/// attribute. If undefined on a primitive, the primitive inherits the 
+	/// attribute. If undefined on a primitive, the primitive inherits the
 	/// value of the nearest ancestor prim, if any.
 	pub fn joints_attr(&self) -> usd::Attribute {
 		self.prim().attribute(&TOKENS.skel_joints)
@@ -248,7 +246,6 @@ impl SkelBindingAPI<'_> {
 	pub fn blend_shape_targets_rel(&self) -> usd::Relationship {
 		self.prim().relationship(&TOKENS.skel_blend_shape_targets)
 	}
-
 }
 
 impl<'a> std::ops::Deref for SkelBindingAPI<'a> {
@@ -287,7 +284,6 @@ impl BlendShape<'_> {
 	pub fn point_indices_attr(&self) -> usd::Attribute {
 		self.prim().attribute(&TOKENS.point_indices)
 	}
-
 }
 
 impl<'a> std::ops::Deref for BlendShape<'a> {

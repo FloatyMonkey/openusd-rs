@@ -58,7 +58,7 @@ impl LightAPI<'_> {
 	/// Normalizes the emission such that the power of the light
 	/// remains constant while altering the size of the light, by dividing the
 	/// luminance by the world-space surface area of the light.
-	/// 
+	///
 	/// This makes it easier to independently adjust the brightness and size
 	/// of the light, by causing the total illumination provided by a light to
 	/// not vary with the area or angular size of the light.
@@ -74,7 +74,8 @@ impl LightAPI<'_> {
 
 	/// Enables using colorTemperature.
 	pub fn enable_color_temperature_attr(&self) -> usd::Attribute {
-		self.prim().attribute(&TOKENS.inputs_enable_color_temperature)
+		self.prim()
+			.attribute(&TOKENS.inputs_enable_color_temperature)
 	}
 
 	/// Color temperature, in degrees Kelvin, representing the
@@ -85,7 +86,6 @@ impl LightAPI<'_> {
 	pub fn color_temperature_attr(&self) -> usd::Attribute {
 		self.prim().attribute(&TOKENS.inputs_color_temperature)
 	}
-
 }
 
 impl<'a> std::ops::Deref for LightAPI<'a> {
@@ -103,7 +103,6 @@ impl BoundableLightBase<'_> {
 	pub fn define(stage: &usd::Stage, path: impl Into<sdf::Path>) -> BoundableLightBase {
 		BoundableLightBase(usd::SchemaBase::new(stage.prim_at_path(path)))
 	}
-
 }
 
 impl<'a> std::ops::Deref for BoundableLightBase<'a> {
@@ -121,7 +120,6 @@ impl NonboundableLightBase<'_> {
 	pub fn define(stage: &usd::Stage, path: impl Into<sdf::Path>) -> NonboundableLightBase {
 		NonboundableLightBase(usd::SchemaBase::new(stage.prim_at_path(path)))
 	}
-
 }
 
 impl<'a> std::ops::Deref for NonboundableLightBase<'a> {
@@ -145,7 +143,6 @@ impl DiskLight<'_> {
 	pub fn radius_attr(&self) -> usd::Attribute {
 		self.prim().attribute(&TOKENS.inputs_radius)
 	}
-
 }
 
 impl<'a> std::ops::Deref for DiskLight<'a> {
@@ -157,8 +154,8 @@ impl<'a> std::ops::Deref for DiskLight<'a> {
 
 /// Light emitted from one side of a rectangle.
 /// The rectangle is centered in the XY plane and emits light along the -Z axis.
-/// The rectangle is 1 unit in length in the X and Y axis.  In the default 
-/// position, a texture file's min coordinates should be at (+X, +Y) and 
+/// The rectangle is 1 unit in length in the X and Y axis.  In the default
+/// position, a texture file's min coordinates should be at (+X, +Y) and
 /// max coordinates at (-X, -Y).
 #[repr(transparent)]
 pub struct RectLight<'a>(usd::SchemaBase<'a>);
@@ -182,7 +179,6 @@ impl RectLight<'_> {
 	pub fn texture_file_attr(&self) -> usd::Attribute {
 		self.prim().attribute(&TOKENS.inputs_texture_file)
 	}
-
 }
 
 impl<'a> std::ops::Deref for RectLight<'a> {
@@ -213,7 +209,6 @@ impl SphereLight<'_> {
 	pub fn treat_as_point_attr(&self) -> usd::Attribute {
 		self.prim().attribute(&TOKENS.treat_as_point)
 	}
-
 }
 
 impl<'a> std::ops::Deref for SphereLight<'a> {
@@ -225,7 +220,7 @@ impl<'a> std::ops::Deref for SphereLight<'a> {
 
 /// Light emitted inward from a distant external environment,
 /// such as a sky or IBL light probe.
-/// 
+///
 /// In this version of the dome light, the dome's default orientation is such
 /// that its top pole is aligned with the world's +Y axis. This adheres to the
 /// OpenEXR specification for latlong environment maps.
@@ -271,7 +266,6 @@ impl DomeLight<'_> {
 	pub fn guide_radius_attr(&self) -> usd::Attribute {
 		self.prim().attribute(&TOKENS.guide_radius)
 	}
-
 }
 
 impl<'a> std::ops::Deref for DomeLight<'a> {

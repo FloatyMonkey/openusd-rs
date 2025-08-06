@@ -11,6 +11,18 @@ impl<'a> Relationship<'a> {
 	}
 }
 
+impl<'a> Relationship<'a> {
+	pub fn get_targets(&self) -> &sdf::Path {
+		//unsure about what name to use here.
+    let target = &self.0;
+
+		// Get the raw SdfPath of the property
+		let prop_path = target.path();
+
+    prop_path
+	}
+}
+
 impl<'a> std::ops::Deref for Relationship<'a> {
 	type Target = Property<'a>;
 	fn deref(&self) -> &Self::Target {

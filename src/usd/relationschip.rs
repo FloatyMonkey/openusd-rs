@@ -12,14 +12,9 @@ impl<'a> Relationship<'a> {
 }
 
 impl<'a> Relationship<'a> {
-	pub fn get_targets(&self) -> &sdf::Path {
-		//unsure about what name to use here.
-		let target = &self.0;
-
-		// Get the raw SdfPath of the property
-		let prop_path = target.path();
-
-		prop_path
+	pub fn get_targets(&self) -> Vec<sdf::Path> {
+		self.metadata(&sdf::FIELD_KEYS.target_paths)
+			.unwrap_or_default()
 	}
 }
 

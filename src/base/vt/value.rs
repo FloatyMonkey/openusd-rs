@@ -1,6 +1,4 @@
-//! Value Types
-
-use super::*;
+use crate::{gf, sdf, tf, vt};
 use half::f16;
 use std::collections::HashMap;
 

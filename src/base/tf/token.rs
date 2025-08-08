@@ -1,5 +1,3 @@
-//! Tools Foundations
-
 /// Token for efficient comparison, assignment, and hashing of known strings.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct Token {

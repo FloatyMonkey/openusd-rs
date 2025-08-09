@@ -12,7 +12,7 @@ impl<'a> Relationship<'a> {
 }
 
 impl<'a> Relationship<'a> {
-	pub fn get_targets(&self) -> Vec<sdf::Path> {
+	pub fn targets(&self) -> Vec<sdf::Path> {
 		self.metadata(&sdf::FIELD_KEYS.target_paths)
 			.unwrap_or_default()
 	}

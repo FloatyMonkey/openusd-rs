@@ -11,6 +11,13 @@ impl<'a> Relationship<'a> {
 	}
 }
 
+impl<'a> Relationship<'a> {
+	pub fn targets(&self) -> Vec<sdf::Path> {
+		self.metadata(&sdf::FIELD_KEYS.target_paths)
+			.unwrap_or_default()
+	}
+}
+
 impl<'a> std::ops::Deref for Relationship<'a> {
 	type Target = Property<'a>;
 	fn deref(&self) -> &Self::Target {

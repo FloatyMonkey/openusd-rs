@@ -102,6 +102,8 @@ pub enum ValueStore {
 	PayloadListOp(sdf::PayloadListOp),
 
 	Path(sdf::Path),
+	PathArray(Array<sdf::Path>),
+
 	AssetPath(sdf::AssetPath),
 
 	Specifier(sdf::Specifier),
@@ -188,6 +190,8 @@ impl_value_type_clone!(sdf::Int64ListOp, Int64ListOp);
 impl_value_type_clone!(sdf::UInt64ListOp, UInt64ListOp);
 
 impl_value_type_clone!(sdf::Path, Path);
+impl_value_type_clone!(Array<sdf::Path>, PathArray);
+
 impl_value_type_clone!(sdf::AssetPath, AssetPath);
 
 impl_value_type_deref!(i32, Int);

@@ -1,6 +1,6 @@
 use std::io::Cursor;
 
-use super::reader::ReadBytesExt;
+use crate::io_ext::ReadBytesExt;
 
 pub fn get_encoded_buffer_size<T>(count: usize) -> usize {
 	if count == 0 {
@@ -28,7 +28,7 @@ impl IntMapper for u32 {
 	}
 }
 
-pub fn decode_integers<T: IntMapper>(buffer: &[u8], count: usize) -> Vec<T> {
+pub fn decode_integers<T: IntMapper>(buffer: &[u8], count: usize) -> std::io::Result<Vec<T>> {
 	let common_value = i32::from_le_bytes(buffer[0..4].try_into().unwrap());
 	let num_codes_bytes = (count * 2 + 7) / 8;
 
@@ -45,13 +45,13 @@ pub fn decode_integers<T: IntMapper>(buffer: &[u8], count: usize) -> Vec<T> {
 	while ints_left > 0 {
 		let to_process = ints_left.min(4);
 
-		let code_byte = codes_cursor.read_as::<u8>();
+		let code_byte = codes_cursor.read_as::<u8>()?;
 
 		for i in 0..to_process {
 			prev_value += match (code_byte >> (2 * i)) & 3 {
-				1 => vints_cursor.read_as::<i8>() as i32,
-				2 => vints_cursor.read_as::<i16>() as i32,
-				3 => vints_cursor.read_as::<i32>(),
+				1 => vints_cursor.read_as::<i8>()? as i32,
+				2 => vints_cursor.read_as::<i16>()? as i32,
+				3 => vints_cursor.read_as::<i32>()?,
 				_ => common_value,
 			};
 
@@ -63,7 +63,7 @@ pub fn decode_integers<T: IntMapper>(buffer: &[u8], count: usize) -> Vec<T> {
 
 	assert_eq!(result.len(), count);
 
-	result
+	Ok(result)
 }
 
 #[cfg(test)]
@@ -86,6 +86,9 @@ mod tests {
 		output.extend_from_slice(&0_i8.to_le_bytes());
 		output.extend_from_slice(&0_i8.to_le_bytes());
 
-		assert_eq!(input, decode_integers::<u32>(&output, 7).as_slice());
+		assert_eq!(
+			input,
+			decode_integers::<u32>(&output, 7).unwrap().as_slice()
+		);
 	}
 }

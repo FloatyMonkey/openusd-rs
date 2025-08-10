@@ -17,7 +17,7 @@ impl Stage {
 		let path = asset_path.as_ref();
 		let data: Box<dyn AbstractData> = if let Some(extension) = path.extension() {
 			if extension == "usdc" {
-				Box::new(UsdcFile::open(path))
+				Box::new(UsdcFile::open(path).unwrap())
 			} else if extension == "usda" {
 				match std::fs::read_to_string(path) {
 					Ok(content) => match usda::parser::parse(&content) {

@@ -1,7 +1,6 @@
-use super::{
-	integer_coding::*,
-	reader::{ReadBytesExt, WriteBytesExt},
-};
+use super::integer_coding::*;
+use crate::io_ext::{ReadBytesExt, WriteBytesExt};
+use crate::{gf, sdf, tf, vt};
 
 use std::{
 	cell::RefCell,
@@ -10,9 +9,9 @@ use std::{
 	path::Path,
 };
 
-use crate::{gf, sdf, tf, vt};
-
 use half::f16;
+
+type Result<T> = std::io::Result<T>;
 
 type Index = u32;
 
@@ -297,32 +296,25 @@ impl<T> From<&sdf::ListOp<T>> for ListOpHeader {
 	}
 }
 
-fn read_toc(cursor: &mut Cursor<&[u8]>) -> TableOfContents {
+fn read_toc(cursor: &mut Cursor<&[u8]>) -> Result<TableOfContents> {
 	let mut sections = vec![];
 
-	let mut toc_offset = [0; 8];
-	cursor.read_exact(&mut toc_offset).unwrap();
-	let toc_offset = u64::from_le_bytes(toc_offset);
-
+	let toc_offset = cursor.read_as::<u64>()?;
 	cursor.set_position(toc_offset);
 
-	let toc_count = cursor.read_as::<u64>();
+	let section_count = cursor.read_as::<u64>()?;
 
-	for _ in 0..toc_count {
-		let mut token = [0; 16];
-		cursor.read_exact(&mut token).unwrap();
+	for _ in 0..section_count {
+		let mut name = [0; 16];
+		cursor.read_exact(&mut name).unwrap();
 
-		let offset = cursor.read_as::<u64>();
-		let size = cursor.read_as::<u64>();
+		let start = cursor.read_as::<u64>()?;
+		let size = cursor.read_as::<u64>()?;
 
-		sections.push(Section {
-			name: token,
-			start: offset,
-			size,
-		});
+		sections.push(Section { name, start, size });
 	}
 
-	TableOfContents { sections }
+	Ok(TableOfContents { sections })
 }
 
 fn decompress_from_buffer(compressed_buffer: &[u8], workspace_size: usize) -> Vec<u8> {
@@ -396,34 +388,34 @@ fn get_compressed_buffer_size(input_size: usize) -> usize {
 	sz
 }
 
-fn read_compressed_ints<T: IntMapper>(cursor: &mut Cursor<&[u8]>, count: usize) -> Vec<T> {
-	let compressed_size = cursor.read_as::<u64>();
+fn read_compressed_ints<T: IntMapper>(cursor: &mut Cursor<&[u8]>, count: usize) -> Result<Vec<T>> {
+	let compressed_size = cursor.read_as::<u64>()?;
 	let workspace_size = get_compressed_buffer_size(get_encoded_buffer_size::<T>(count));
 
 	let mut compressed_buffer = vec![0; compressed_size as usize];
-	cursor.read_exact(&mut compressed_buffer).unwrap();
+	cursor.read_exact(&mut compressed_buffer)?;
 
 	let uncompressed_buffer = decompress_from_buffer(&compressed_buffer, workspace_size);
 
 	decode_integers::<T>(&uncompressed_buffer, count)
 }
 
-fn read_tokens(cursor: &mut Cursor<&[u8]>, section: &Section) -> Result<Vec<tf::Token>, String> {
+fn read_tokens(cursor: &mut Cursor<&[u8]>, section: &Section) -> Result<Vec<tf::Token>> {
 	cursor.set_position(section.start);
 
-	let token_count = cursor.read_as::<u64>();
-	let uncompressed_size = cursor.read_as::<u64>();
-	let compressed_size = cursor.read_as::<u64>();
+	let token_count = cursor.read_as::<u64>()?;
+	let uncompressed_size = cursor.read_as::<u64>()?;
+	let compressed_size = cursor.read_as::<u64>()?;
 
 	assert_eq!(compressed_size + 24, section.size);
 
 	let mut compressed_buffer = vec![0; compressed_size as usize];
-	cursor.read_exact(&mut compressed_buffer).unwrap();
+	cursor.read_exact(&mut compressed_buffer)?;
 
 	let mut buffer = decompress_from_buffer(&compressed_buffer, uncompressed_size as usize);
 
 	if buffer.last() != Some(&b'\0') {
-		return Err("Tokens section not null-terminated in crate file".into());
+		panic!("Tokens section not null-terminated in crate file");
 	}
 
 	buffer.pop(); // Prevent empty string at the end.
@@ -435,40 +427,40 @@ fn read_tokens(cursor: &mut Cursor<&[u8]>, section: &Section) -> Result<Vec<tf::
 		.collect::<Vec<_>>();
 
 	if tokens.len() != token_count as usize {
-		return Err(format!(
+		panic!(
 			"Crate file claims {} tokens, found {}",
 			token_count,
 			tokens.len()
-		));
+		);
 	}
 
 	Ok(tokens)
 }
 
-fn read_strings(cursor: &mut Cursor<&[u8]>, section: &Section) -> Vec<Index> {
+fn read_strings(cursor: &mut Cursor<&[u8]>, section: &Section) -> Result<Vec<Index>> {
 	cursor.set_position(section.start);
 
-	let indices_count = cursor.read_as::<u64>();
+	let indices_count = cursor.read_as::<u64>()?;
 
 	let mut indices = vec![];
 
 	for _ in 0..indices_count {
-		indices.push(cursor.read_as::<Index>());
+		indices.push(cursor.read_as::<Index>()?);
 	}
 
-	indices
+	Ok(indices)
 }
 
-fn read_fields(cursor: &mut Cursor<&[u8]>, section: &Section) -> Vec<Field> {
+fn read_fields(cursor: &mut Cursor<&[u8]>, section: &Section) -> Result<Vec<Field>> {
 	cursor.set_position(section.start);
 
-	let field_count = cursor.read_as::<u64>() as usize;
+	let field_count = cursor.read_as::<u64>()? as usize;
 
-	let indices = read_compressed_ints::<u32>(cursor, field_count);
+	let indices = read_compressed_ints::<u32>(cursor, field_count)?;
 
-	let flag_size = cursor.read_as::<u64>();
+	let flag_size = cursor.read_as::<u64>()?;
 	let mut compressed_buffer = vec![0; flag_size as usize];
-	cursor.read_exact(&mut compressed_buffer).unwrap();
+	cursor.read_exact(&mut compressed_buffer)?;
 
 	let uncompressed_buffer = decompress_from_buffer(&compressed_buffer, field_count * 8);
 	let mut uncompressed_cursor = Cursor::new(uncompressed_buffer.as_slice());
@@ -477,17 +469,17 @@ fn read_fields(cursor: &mut Cursor<&[u8]>, section: &Section) -> Vec<Field> {
 		.iter()
 		.map(|&name| Field {
 			token_index: name as Index,
-			value_rep: ValueRep(uncompressed_cursor.read_as::<u64>()),
+			value_rep: ValueRep(uncompressed_cursor.read_as::<u64>().unwrap()),
 		})
-		.collect::<Vec<_>>();
+		.collect();
 
-	fields
+	Ok(fields)
 }
 
-fn read_field_sets(cursor: &mut Cursor<&[u8]>, section: &Section) -> Vec<Index> {
+fn read_field_sets(cursor: &mut Cursor<&[u8]>, section: &Section) -> Result<Vec<Index>> {
 	cursor.set_position(section.start);
 
-	let field_set_count = cursor.read_as::<u64>() as usize;
+	let field_set_count = cursor.read_as::<u64>()? as usize;
 
 	read_compressed_ints::<Index>(cursor, field_set_count)
 }
@@ -496,15 +488,15 @@ fn read_paths(
 	cursor: &mut Cursor<&[u8]>,
 	section: &Section,
 	tokens: &[tf::Token],
-) -> Vec<sdf::Path> {
+) -> Result<Vec<sdf::Path>> {
 	cursor.set_position(section.start);
 
-	let path_count = cursor.read_as::<u64>() as usize;
-	let _ = cursor.read_as::<u64>(); // Must be equal to path_count
+	let path_count = cursor.read_as::<u64>()? as usize;
+	let _ = cursor.read_as::<u64>()?; // Must be equal to path_count
 
-	let path_indices = read_compressed_ints::<u32>(cursor, path_count);
-	let element_token_indices = read_compressed_ints::<i32>(cursor, path_count);
-	let jumps = read_compressed_ints::<i32>(cursor, path_count);
+	let path_indices = read_compressed_ints::<u32>(cursor, path_count)?;
+	let element_token_indices = read_compressed_ints::<i32>(cursor, path_count)?;
+	let jumps = read_compressed_ints::<i32>(cursor, path_count)?;
 
 	let mut paths = vec![sdf::Path::empty_path(); path_count];
 
@@ -518,17 +510,17 @@ fn read_paths(
 		&mut paths,
 	);
 
-	paths
+	Ok(paths)
 }
 
-fn read_specs(cursor: &mut Cursor<&[u8]>, section: &Section) -> Vec<Spec> {
+fn read_specs(cursor: &mut Cursor<&[u8]>, section: &Section) -> Result<Vec<Spec>> {
 	cursor.set_position(section.start);
 
-	let spec_count = cursor.read_as::<u64>() as usize;
+	let spec_count = cursor.read_as::<u64>()? as usize;
 
-	let path_indices = read_compressed_ints::<u32>(cursor, spec_count);
-	let field_set_indices = read_compressed_ints::<u32>(cursor, spec_count);
-	let spec_types = read_compressed_ints::<u32>(cursor, spec_count);
+	let path_indices = read_compressed_ints::<u32>(cursor, spec_count)?;
+	let field_set_indices = read_compressed_ints::<u32>(cursor, spec_count)?;
+	let spec_types = read_compressed_ints::<u32>(cursor, spec_count)?;
 
 	let mut spec = Vec::with_capacity(spec_count);
 
@@ -540,14 +532,17 @@ fn read_specs(cursor: &mut Cursor<&[u8]>, section: &Section) -> Vec<Spec> {
 		});
 	}
 
-	spec
+	Ok(spec)
 }
 
 /// Don't compress arrays smaller than this.
 const MIN_COMPRESSED_ARRAY_SIZE: usize = 16;
 
-fn read_int_array<T: Clone + IntMapper>(cursor: &mut Cursor<&[u8]>, rep: ValueRep) -> vt::Array<T> {
-	let count = cursor.read_as::<u64>() as usize;
+fn read_int_array<T: Clone + IntMapper>(
+	cursor: &mut Cursor<&[u8]>,
+	rep: ValueRep,
+) -> Result<vt::Array<T>> {
+	let count = cursor.read_as::<u64>()? as usize;
 
 	if !rep.is_compressed() {
 		// TODO: Should use read_uncompressed_array here.
@@ -562,8 +557,11 @@ fn read_int_array<T: Clone + IntMapper>(cursor: &mut Cursor<&[u8]>, rep: ValueRe
 	read_compressed_ints(cursor, count)
 }
 
-fn read_float_array<T: Clone + Float>(cursor: &mut Cursor<&[u8]>, rep: ValueRep) -> vt::Array<T> {
-	let count = cursor.read_as::<u64>() as usize;
+fn read_float_array<T: Clone + Float>(
+	cursor: &mut Cursor<&[u8]>,
+	rep: ValueRep,
+) -> Result<vt::Array<T>> {
+	let count = cursor.read_as::<u64>()? as usize;
 
 	if !rep.is_compressed() {
 		// TODO: Should use read_uncompressed_array here.
@@ -575,30 +573,26 @@ fn read_float_array<T: Clone + Float>(cursor: &mut Cursor<&[u8]>, rep: ValueRep)
 		return read_contiguous(cursor, count);
 	}
 
-	let code = cursor.read_as::<u8>() as char;
+	let code = cursor.read_as::<u8>()? as char;
 
-	match code {
+	Ok(match code {
 		'i' => {
 			// Compressed integers
-			let ints = read_compressed_ints::<i32>(cursor, count);
-			ints.iter().map(|&i| T::from(i)).collect::<Vec<_>>()
+			let ints = read_compressed_ints::<i32>(cursor, count)?;
+			ints.iter().map(|&i| T::from(i)).collect()
 		}
 		't' => {
 			// Lookup table & indices
-			let lut_count = cursor.read_as::<u32>() as usize;
-			let lut = read_contiguous::<T>(cursor, lut_count);
+			let lut_count = cursor.read_as::<u32>()? as usize;
+			let lut = read_contiguous::<T>(cursor, lut_count)?;
 
-			let indices = read_compressed_ints::<u32>(cursor, count);
-
-			indices
-				.iter()
-				.map(|&i| lut[i as usize].clone())
-				.collect::<Vec<_>>()
+			let indices = read_compressed_ints::<u32>(cursor, count)?;
+			indices.iter().map(|&i| lut[i as usize].clone()).collect()
 		}
 		_ => {
 			panic!("Corrupt data stream detected reading compressed array"); // TODO: Echo crate asset path
 		}
-	}
+	})
 }
 
 fn build_decompressed_paths_recursive(
@@ -700,22 +694,22 @@ fn read_inline_mat4(rep: ValueRep) -> gf::Matrix4d {
 	gf::Matrix4d::from_diagonal(v)
 }
 
-fn read_pod<T: Sized + Default>(cursor: &mut Cursor<&[u8]>) -> T {
+fn read_pod<T: Sized + Default>(cursor: &mut Cursor<&[u8]>) -> Result<T> {
 	let pod = T::default();
 	let byte_slice =
 		unsafe { std::slice::from_raw_parts_mut(&pod as *const T as *mut u8, size_of::<T>()) };
-	cursor.read_exact(byte_slice).unwrap();
-	pod
+	cursor.read_exact(byte_slice)?;
+	Ok(pod)
 }
 
-fn read_pod_vec<T: Sized + Clone + Default>(cursor: &mut Cursor<&[u8]>) -> Vec<T> {
-	let n = cursor.read_as::<u64>() as usize;
+fn read_pod_vec<T: Sized + Clone + Default>(cursor: &mut Cursor<&[u8]>) -> Result<Vec<T>> {
+	let n = cursor.read_as::<u64>()? as usize;
 
 	let mut vec: Vec<T> = vec![Default::default(); n];
 	let byte_slice =
 		unsafe { std::slice::from_raw_parts_mut(vec.as_mut_ptr() as *mut u8, n * size_of::<T>()) };
-	cursor.read_exact(byte_slice).unwrap();
-	vec
+	cursor.read_exact(byte_slice)?;
+	Ok(vec)
 }
 
 fn read_inline(val: ValueRep) -> Option<vt::Value> {
@@ -743,6 +737,99 @@ fn read_inline(val: ValueRep) -> Option<vt::Value> {
 	})
 }
 
+fn unpack_value_rep(file: &UsdcFile, value: ValueRep) -> Result<Option<vt::Value>> {
+	let buffer = &file.buffer;
+
+	if value.ty() == Type::Token && !value.is_array() && value.is_inlined() {
+		let token_index = value.payload();
+		let token = file.tokens[token_index as usize].clone();
+
+		return Ok(Some(vt::Value::new(token)));
+	}
+
+	if let Some(v) = read_inline(value) {
+		return Ok(Some(v));
+	}
+
+	let mut cursor = Cursor::new(buffer.as_slice());
+	cursor.set_position(value.payload());
+
+	Ok(Some(match value.ty() {
+		Type::Half if value.is_array() => read_float_array::<f16>(&mut cursor, value)?.into(),
+		Type::Float if value.is_array() => read_float_array::<f32>(&mut cursor, value)?.into(),
+		Type::Double if value.is_array() => read_float_array::<f64>(&mut cursor, value)?.into(),
+
+		Type::Float if value.is_inlined() => {
+			let val = value.payload() as u32;
+			f32::from_bits(val).into()
+		}
+
+		Type::AssetPath => {
+			let token = file.tokens[value.payload() as usize].clone();
+			vt::Value::new(sdf::AssetPath {
+				authored_path: token.as_str().into(),
+				evaluated_path: String::new(),
+				resolved_path: "".into(),
+			})
+		}
+
+		Type::Int if value.is_array() => read_int_array::<i32>(&mut cursor, value)?.into(),
+		Type::UInt if value.is_array() => read_int_array::<u32>(&mut cursor, value)?.into(),
+
+		Type::Vec3f if value.is_array() => read_pod_vec::<gf::Vec3f>(&mut cursor)?.into(),
+
+		Type::Quath => read_pod::<gf::Quath>(&mut cursor)?.into(),
+		Type::Quatf => read_pod::<gf::Quatf>(&mut cursor)?.into(),
+		Type::Quatd => read_pod::<gf::Quatd>(&mut cursor)?.into(),
+
+		Type::Vec2h => read_pod::<gf::Vec2h>(&mut cursor)?.into(),
+		Type::Vec2f => read_pod::<gf::Vec2f>(&mut cursor)?.into(),
+		Type::Vec2d => read_pod::<gf::Vec2d>(&mut cursor)?.into(),
+		Type::Vec2i => read_pod::<gf::Vec2i>(&mut cursor)?.into(),
+
+		Type::Vec3h => read_pod::<gf::Vec3h>(&mut cursor)?.into(),
+		Type::Vec3f => read_pod::<gf::Vec3f>(&mut cursor)?.into(),
+		Type::Vec3d => read_pod::<gf::Vec3d>(&mut cursor)?.into(),
+		Type::Vec3i => read_pod::<gf::Vec3i>(&mut cursor)?.into(),
+
+		Type::Vec4h => read_pod::<gf::Vec4h>(&mut cursor)?.into(),
+		Type::Vec4f => read_pod::<gf::Vec4f>(&mut cursor)?.into(),
+		Type::Vec4d => read_pod::<gf::Vec4d>(&mut cursor)?.into(),
+		Type::Vec4i => read_pod::<gf::Vec4i>(&mut cursor)?.into(),
+
+		Type::Matrix2d => read_pod::<gf::Matrix2d>(&mut cursor)?.into(),
+		Type::Matrix3d => read_pod::<gf::Matrix3d>(&mut cursor)?.into(),
+		Type::Matrix4d => read_pod::<gf::Matrix4d>(&mut cursor)?.into(),
+
+		Type::TokenVector => {
+			let indices = Vec::<Index>::read(file, &mut cursor)?;
+			let vector = indices
+				.iter()
+				.map(|i| file.tokens[*i as usize].clone())
+				.collect::<Vec<_>>();
+			vt::Value::new(vector)
+		}
+
+		Type::Token if value.is_array() => {
+			let indices = Vec::<Index>::read(file, &mut cursor)?;
+			let vector = indices
+				.iter()
+				.map(|i| file.tokens[*i as usize].clone())
+				.collect::<Vec<_>>();
+			vt::Value::new(vector)
+		}
+
+		Type::IntListOp => sdf::IntListOp::read(file, &mut cursor)?.into(),
+		Type::UIntListOp => sdf::UIntListOp::read(file, &mut cursor)?.into(),
+		Type::Int64ListOp => sdf::Int64ListOp::read(file, &mut cursor)?.into(),
+		Type::UInt64ListOp => sdf::UInt64ListOp::read(file, &mut cursor)?.into(),
+
+		Type::Dictionary => vt::Dictionary::read(file, &mut cursor)?.into(),
+
+		_ => return Ok(None),
+	}))
+}
+
 impl sdf::AbstractData for UsdcFile {
 	fn get(&self, path: &sdf::Path, field: &tf::Token) -> Option<vt::Value> {
 		let path_index = self.paths.iter().position(|p| *p == *path)?;
@@ -754,97 +841,7 @@ impl sdf::AbstractData for UsdcFile {
 
 		let field = fields(self, spec).find(|f| self.tokens[f.token_index as usize] == *field)?;
 
-		let buffer = &self.buffer;
-		let value = field.value_rep;
-
-		if value.ty() == Type::Token && !value.is_array() && value.is_inlined() {
-			let token_index = value.payload();
-			let token = self.tokens[token_index as usize].clone();
-
-			return Some(vt::Value::new(token));
-		}
-
-		if let Some(v) = read_inline(value) {
-			return Some(v);
-		}
-
-		let mut cursor = Cursor::new(buffer.as_slice());
-		cursor.set_position(value.payload());
-
-		Some(match value.ty() {
-			Type::Half if value.is_array() => read_float_array::<f16>(&mut cursor, value).into(),
-			Type::Float if value.is_array() => read_float_array::<f32>(&mut cursor, value).into(),
-			Type::Double if value.is_array() => read_float_array::<f64>(&mut cursor, value).into(),
-
-			Type::Float if value.is_inlined() => {
-				let val = value.payload() as u32;
-				f32::from_bits(val).into()
-			}
-
-			Type::AssetPath => {
-				let token = self.tokens[value.payload() as usize].clone();
-				vt::Value::new(sdf::AssetPath {
-					authored_path: token.as_str().into(),
-					evaluated_path: String::new(),
-					resolved_path: "".into(),
-				})
-			}
-
-			Type::Int if value.is_array() => read_int_array::<i32>(&mut cursor, value).into(),
-			Type::UInt if value.is_array() => read_int_array::<u32>(&mut cursor, value).into(),
-
-			Type::Vec3f if value.is_array() => read_pod_vec::<gf::Vec3f>(&mut cursor).into(),
-
-			Type::Quath => read_pod::<gf::Quath>(&mut cursor).into(),
-			Type::Quatf => read_pod::<gf::Quatf>(&mut cursor).into(),
-			Type::Quatd => read_pod::<gf::Quatd>(&mut cursor).into(),
-
-			Type::Vec2h => read_pod::<gf::Vec2h>(&mut cursor).into(),
-			Type::Vec2f => read_pod::<gf::Vec2f>(&mut cursor).into(),
-			Type::Vec2d => read_pod::<gf::Vec2d>(&mut cursor).into(),
-			Type::Vec2i => read_pod::<gf::Vec2i>(&mut cursor).into(),
-
-			Type::Vec3h => read_pod::<gf::Vec3h>(&mut cursor).into(),
-			Type::Vec3f => read_pod::<gf::Vec3f>(&mut cursor).into(),
-			Type::Vec3d => read_pod::<gf::Vec3d>(&mut cursor).into(),
-			Type::Vec3i => read_pod::<gf::Vec3i>(&mut cursor).into(),
-
-			Type::Vec4h => read_pod::<gf::Vec4h>(&mut cursor).into(),
-			Type::Vec4f => read_pod::<gf::Vec4f>(&mut cursor).into(),
-			Type::Vec4d => read_pod::<gf::Vec4d>(&mut cursor).into(),
-			Type::Vec4i => read_pod::<gf::Vec4i>(&mut cursor).into(),
-
-			Type::Matrix2d => read_pod::<gf::Matrix2d>(&mut cursor).into(),
-			Type::Matrix3d => read_pod::<gf::Matrix3d>(&mut cursor).into(),
-			Type::Matrix4d => read_pod::<gf::Matrix4d>(&mut cursor).into(),
-
-			Type::TokenVector => {
-				let indices = Vec::<Index>::read(self, &mut cursor);
-				let vector = indices
-					.iter()
-					.map(|i| self.tokens[*i as usize].clone())
-					.collect::<Vec<_>>();
-				vt::Value::new(vector)
-			}
-
-			Type::Token if value.is_array() => {
-				let indices = Vec::<Index>::read(self, &mut cursor);
-				let vector = indices
-					.iter()
-					.map(|i| self.tokens[*i as usize].clone())
-					.collect::<Vec<_>>();
-				vt::Value::new(vector)
-			}
-
-			Type::IntListOp => sdf::IntListOp::read(self, &mut cursor).into(),
-			Type::UIntListOp => sdf::UIntListOp::read(self, &mut cursor).into(),
-			Type::Int64ListOp => sdf::Int64ListOp::read(self, &mut cursor).into(),
-			Type::UInt64ListOp => sdf::UInt64ListOp::read(self, &mut cursor).into(),
-
-			Type::Dictionary => vt::Dictionary::read(self, &mut cursor).into(),
-
-			_ => return None,
-		})
+		unpack_value_rep(self, field.value_rep).unwrap()
 	}
 
 	fn spec_type(&self, path: &sdf::Path) -> Option<sdf::SpecType> {
@@ -898,32 +895,34 @@ pub struct UsdcFile {
 }
 
 trait CrateIo<'a> {
-	fn read(file: &'a UsdcFile, cursor: &mut Cursor<&[u8]>) -> Self;
+	fn read(file: &'a UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self>
+	where
+		Self: Sized;
 
-	fn write(&self, file: &mut UsdcFile, cursor: &mut Cursor<&mut [u8]>) {
+	fn write(&self, file: &mut UsdcFile, cursor: &mut Cursor<&mut [u8]>) -> Result<()> {
 		unimplemented!()
 	}
 }
 
-fn read_contiguous<T: Clone>(cursor: &mut Cursor<&[u8]>, count: usize) -> Vec<T> {
+fn read_contiguous<T: Clone>(cursor: &mut Cursor<&[u8]>, count: usize) -> Result<Vec<T>> {
 	let mut vec = vec![unsafe { std::mem::zeroed::<T>() }; count];
 	let slice = unsafe {
 		std::slice::from_raw_parts_mut(vec.as_mut_ptr() as *mut u8, vec.len() * size_of::<T>())
 	};
-	cursor.read_exact(slice).unwrap();
-	vec
+	cursor.read_exact(slice)?;
+	Ok(vec)
 }
 
 impl<T: Clone> CrateIo<'_> for Vec<T> {
-	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Self {
-		let count = cursor.read_as::<u64>() as usize;
+	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
+		let count = cursor.read_as::<u64>()? as usize;
 		read_contiguous(cursor, count)
 	}
 }
 
 impl<T: Clone + Default> CrateIo<'_> for sdf::ListOp<T> {
-	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Self {
-		let h = ListOpHeader(cursor.read_as::<u8>());
+	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
+		let h = ListOpHeader(cursor.read_as::<u8>()?);
 
 		let mut list_op = sdf::ListOp::default();
 
@@ -932,75 +931,77 @@ impl<T: Clone + Default> CrateIo<'_> for sdf::ListOp<T> {
 		}
 
 		if h.has_explicit_items() {
-			list_op.explicit_items = Vec::read(file, cursor);
+			list_op.explicit_items = Vec::read(file, cursor)?;
 		}
 
 		if h.has_added_items() {
-			list_op.added_items = Vec::read(file, cursor);
+			list_op.added_items = Vec::read(file, cursor)?;
 		}
 
 		if h.has_prepended_items() {
-			list_op.prepended_items = Vec::read(file, cursor);
+			list_op.prepended_items = Vec::read(file, cursor)?;
 		}
 
 		if h.has_appended_items() {
-			list_op.appended_items = Vec::read(file, cursor);
+			list_op.appended_items = Vec::read(file, cursor)?;
 		}
 
 		if h.has_deleted_items() {
-			list_op.deleted_items = Vec::read(file, cursor);
+			list_op.deleted_items = Vec::read(file, cursor)?;
 		}
 
 		if h.has_ordered_items() {
-			list_op.ordered_items = Vec::read(file, cursor);
+			list_op.ordered_items = Vec::read(file, cursor)?;
 		}
 
-		list_op
+		Ok(list_op)
 	}
 
-	fn write(&self, file: &mut UsdcFile, cursor: &mut Cursor<&mut [u8]>) {
+	fn write(&self, file: &mut UsdcFile, cursor: &mut Cursor<&mut [u8]>) -> Result<()> {
 		let h = ListOpHeader::from(self);
 
-		cursor.write_as::<u8>(h.0);
+		cursor.write_as::<u8>(h.0)?;
 
 		if h.has_explicit_items() {
-			self.explicit_items.write(file, cursor);
+			self.explicit_items.write(file, cursor)?;
 		}
 
 		if h.has_added_items() {
-			self.added_items.write(file, cursor);
+			self.added_items.write(file, cursor)?;
 		}
 
 		if h.has_prepended_items() {
-			self.prepended_items.write(file, cursor);
+			self.prepended_items.write(file, cursor)?;
 		}
 
 		if h.has_appended_items() {
-			self.appended_items.write(file, cursor);
+			self.appended_items.write(file, cursor)?;
 		}
 
 		if h.has_deleted_items() {
-			self.deleted_items.write(file, cursor);
+			self.deleted_items.write(file, cursor)?;
 		}
 
 		if h.has_ordered_items() {
-			self.ordered_items.write(file, cursor);
+			self.ordered_items.write(file, cursor)?;
 		}
+
+		Ok(())
 	}
 }
 
 impl UsdcFile {
-	pub fn open(asset_path: &Path) -> Self {
-		let buffer = std::fs::read(asset_path).unwrap();
+	pub fn open(asset_path: &Path) -> Result<Self> {
+		let buffer = std::fs::read(asset_path)?;
 		let mut cursor = Cursor::new(buffer.as_slice());
 
 		let mut magic = [0; 8];
-		cursor.read_exact(&mut magic).unwrap();
+		cursor.read_exact(&mut magic)?;
 
 		assert_eq!(&magic, b"PXR-USDC");
 
 		let mut version = [0; 8];
-		cursor.read_exact(&mut version).unwrap();
+		cursor.read_exact(&mut version)?;
 
 		let version = Version::new(version[0], version[1], version[2]);
 
@@ -1008,20 +1009,21 @@ impl UsdcFile {
 		// https://github.com/PixarAnimationStudios/OpenUSD/commit/09b8c2c
 		assert!(version >= Version::new(0, 8, 0) && version <= Version::new(0, 12, 0));
 
-		let toc = read_toc(&mut cursor);
+		let toc = read_toc(&mut cursor)?;
 
-		let tokens = read_tokens(&mut cursor, toc.get_section(Section::TOKENS).unwrap()).unwrap();
-		let strings = read_strings(&mut cursor, toc.get_section(Section::STRINGS).unwrap());
-		let fields = read_fields(&mut cursor, toc.get_section(Section::FIELDS).unwrap());
-		let field_sets = read_field_sets(&mut cursor, toc.get_section(Section::FIELDSETS).unwrap());
+		let tokens = read_tokens(&mut cursor, toc.get_section(Section::TOKENS).unwrap())?;
+		let strings = read_strings(&mut cursor, toc.get_section(Section::STRINGS).unwrap())?;
+		let fields = read_fields(&mut cursor, toc.get_section(Section::FIELDS).unwrap())?;
+		let field_sets =
+			read_field_sets(&mut cursor, toc.get_section(Section::FIELDSETS).unwrap())?;
 		let paths = read_paths(
 			&mut cursor,
 			toc.get_section(Section::PATHS).unwrap(),
 			&tokens,
-		);
-		let specs = read_specs(&mut cursor, toc.get_section(Section::SPECS).unwrap());
+		)?;
+		let specs = read_specs(&mut cursor, toc.get_section(Section::SPECS).unwrap())?;
 
-		UsdcFile {
+		Ok(UsdcFile {
 			version,
 			buffer,
 			tokens,
@@ -1030,7 +1032,7 @@ impl UsdcFile {
 			field_sets,
 			paths,
 			specs,
-		}
+		})
 	}
 }
 
@@ -1047,35 +1049,35 @@ impl UsdcFile {
 		&self.paths[index as usize]
 	}
 
-	fn read<'a, T: CrateIo<'a>>(&'a self, cursor: &mut Cursor<&[u8]>) -> T {
+	fn read<'a, T: CrateIo<'a>>(&'a self, cursor: &mut Cursor<&[u8]>) -> Result<T> {
 		T::read(self, cursor)
 	}
 }
 
 impl CrateIo<'_> for String {
-	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Self {
-		file.get_string(cursor.read_as::<Index>()).to_string()
+	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
+		Ok(file.get_string(cursor.read_as::<Index>()?).to_string())
 	}
 }
 
 impl CrateIo<'_> for tf::Token {
-	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Self {
-		file.get_token(cursor.read_as::<Index>()).clone()
+	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
+		Ok(file.get_token(cursor.read_as::<Index>()?).clone())
 	}
 }
 
 impl CrateIo<'_> for sdf::Path {
-	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Self {
-		file.get_path(cursor.read_as::<Index>()).clone()
+	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
+		Ok(file.get_path(cursor.read_as::<Index>()?).clone())
 	}
 }
 
 impl CrateIo<'_> for sdf::LayerOffset {
-	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Self {
-		Self {
-			offset: cursor.read_as::<f64>(),
-			scale: cursor.read_as::<f64>(),
-		}
+	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
+		Ok(Self {
+			offset: cursor.read_as::<f64>()?,
+			scale: cursor.read_as::<f64>()?,
+		})
 	}
 }
 
@@ -1084,11 +1086,11 @@ thread_local! {
 }
 
 impl CrateIo<'_> for vt::Value {
-	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Self {
-		let offset = cursor.read_as::<i64>();
-		cursor.seek_relative(offset - 8);
+	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
+		let offset = cursor.read_as::<i64>()?;
+		cursor.seek_relative(offset - 8)?;
 
-		let value_rep = ValueRep(cursor.read_as::<u64>());
+		let value_rep = ValueRep(cursor.read_as::<u64>()?);
 
 		/*let mut recursion_guard = LOCAL_UNPACK_RECURSION_GUARD.with(|guard| guard.borrow_mut());
 
@@ -1100,28 +1102,33 @@ impl CrateIo<'_> for vt::Value {
 
 		recursion_guard.remove(&value_rep.0);*/
 
-		vt::Value::new(0.0)
+		Ok(vt::Value::new(0.0))
 	}
 }
 
 impl CrateIo<'_> for vt::Dictionary {
-	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Self {
-		let size = cursor.read_as::<u64>() as usize;
+	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
+		let size = cursor.read_as::<u64>()? as usize;
 
-		(0..size)
-			.map(|_| (file.read::<String>(cursor), file.read::<vt::Value>(cursor)))
-			.collect()
+		Ok((0..size)
+			.map(|_| {
+				(
+					file.read::<String>(cursor).unwrap(),
+					file.read::<vt::Value>(cursor).unwrap(),
+				)
+			})
+			.collect())
 	}
 }
 
 impl CrateIo<'_> for sdf::Reference {
-	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Self {
-		Self {
-			asset_path: file.read::<String>(cursor),
-			prim_path: file.read::<sdf::Path>(cursor),
-			layer_offset: file.read::<sdf::LayerOffset>(cursor),
-			custom_data: file.read::<vt::Dictionary>(cursor),
-		}
+	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
+		Ok(Self {
+			asset_path: file.read::<String>(cursor)?,
+			prim_path: file.read::<sdf::Path>(cursor)?,
+			layer_offset: file.read::<sdf::LayerOffset>(cursor)?,
+			custom_data: file.read::<vt::Dictionary>(cursor)?,
+		})
 	}
 }
 

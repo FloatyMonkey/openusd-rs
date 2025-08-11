@@ -190,6 +190,15 @@ impl PathNode {
 	}
 }
 
+impl PartialEq for PathNode {
+	fn eq(&self, other: &Self) -> bool {
+		self.parent == other.parent
+			&& self.element_count == other.element_count
+			&& self.flags == other.flags
+			&& self.data == other.data
+	}
+}
+
 // TODO: Update ref_count when cloning or dropping Handle
 pub type PoolHandle = u32;
 

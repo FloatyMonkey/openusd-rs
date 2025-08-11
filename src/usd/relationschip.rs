@@ -15,13 +15,6 @@ impl<'a> Relationship<'a> {
     pub fn targets(&self) -> Option<vt::Array<sdf::Path>> {
         self.metadata::<vt::Array<sdf::Path>>(&sdf::FIELD_KEYS.target_paths)
     }
-
-    //vector based:
-    pub fn targets_vec(&self) -> Vec<sdf::Path> {
-        self.metadata::<vt::Array<sdf::Path>>(&sdf::FIELD_KEYS.target_paths)
-            .map(|arr| arr.into_iter().collect())
-            .unwrap_or_default()
-    }
 }
 
 impl<'a> std::ops::Deref for Relationship<'a> {

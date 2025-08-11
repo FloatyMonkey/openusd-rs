@@ -6,7 +6,7 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
-use openusd_rs::{sdf, tf, usd};
+use openusd_rs::{sdf, tf, usd, vt};
 
 #[derive(Debug, Clone)]
 struct ClassDef {
@@ -59,9 +59,9 @@ fn process_prim(prim: &usd::Prim, class_defs: &mut Vec<ClassDef>) {
 			let mut properties = Vec::new();
 
 			if let Some(prop_names) =
-				prim.metadata::<Vec<tf::Token>>(&sdf::CHILDREN_KEYS.property_children)
+				prim.metadata::<vt::Array<tf::Token>>(&sdf::CHILDREN_KEYS.property_children)
 			{
-				for prop_name in prop_names {
+				for prop_name in &prop_names {
 					let prop = prim.property(&prop_name);
 
 					// TODO: apiName should be of type tf::Token but parser detects it as String for now
@@ -173,7 +173,7 @@ fn generate_class(class: &ClassDef) -> String {
 
 	code.push_str(&format!("impl {}<'_> {{\n", class.name));
 	code.push_str(&format!(
-		"\tpub fn define(stage: &usd::Stage, path: impl Into<sdf::Path>) -> {} {{\n",
+		"\tpub fn define(stage: &usd::Stage, path: impl Into<sdf::Path>) -> {}<'_> {{\n",
 		class.name
 	));
 	code.push_str(&format!(
@@ -186,7 +186,7 @@ fn generate_class(class: &ClassDef) -> String {
 		write_documentation(&mut code, &prop.documentation, "\t");
 		if prop.is_relationship {
 			code.push_str(&format!(
-				"\tpub fn {}_rel(&self) -> usd::Relationship {{\n",
+				"\tpub fn {}_rel(&self) -> usd::Relationship<'_> {{\n",
 				snakecase_from_camelcase(&prop.api_name)
 			));
 			code.push_str(&format!(
@@ -196,7 +196,7 @@ fn generate_class(class: &ClassDef) -> String {
 			code.push_str("\t}\n\n");
 		} else {
 			code.push_str(&format!(
-				"\tpub fn {}_attr(&self) -> usd::Attribute {{\n",
+				"\tpub fn {}_attr(&self) -> usd::Attribute<'_> {{\n",
 				snakecase_from_camelcase(&prop.api_name)
 			));
 			code.push_str(&format!(

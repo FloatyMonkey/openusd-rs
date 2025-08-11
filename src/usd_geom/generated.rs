@@ -28,15 +28,15 @@ declare_public_tokens!(Tokens, TOKENS, [
 pub struct Imageable<'a>(usd::SchemaBase<'a>);
 
 impl Imageable<'_> {
-	pub fn define(stage: &usd::Stage, path: impl Into<sdf::Path>) -> Imageable {
+	pub fn define(stage: &usd::Stage, path: impl Into<sdf::Path>) -> Imageable<'_> {
 		Imageable(usd::SchemaBase::new(stage.prim_at_path(path)))
 	}
 
-	pub fn visibility_attr(&self) -> usd::Attribute {
+	pub fn visibility_attr(&self) -> usd::Attribute<'_> {
 		self.prim().attribute(&TOKENS.visibility)
 	}
 
-	pub fn purpose_attr(&self) -> usd::Attribute {
+	pub fn purpose_attr(&self) -> usd::Attribute<'_> {
 		self.prim().attribute(&TOKENS.purpose)
 	}
 
@@ -53,11 +53,11 @@ impl<'a> std::ops::Deref for Imageable<'a> {
 pub struct Xformable<'a>(usd::SchemaBase<'a>);
 
 impl Xformable<'_> {
-	pub fn define(stage: &usd::Stage, path: impl Into<sdf::Path>) -> Xformable {
+	pub fn define(stage: &usd::Stage, path: impl Into<sdf::Path>) -> Xformable<'_> {
 		Xformable(usd::SchemaBase::new(stage.prim_at_path(path)))
 	}
 
-	pub fn xform_op_order_attr(&self) -> usd::Attribute {
+	pub fn xform_op_order_attr(&self) -> usd::Attribute<'_> {
 		self.prim().attribute(&TOKENS.xform_op_order)
 	}
 
@@ -74,7 +74,7 @@ impl<'a> std::ops::Deref for Xformable<'a> {
 pub struct Boundable<'a>(usd::SchemaBase<'a>);
 
 impl Boundable<'_> {
-	pub fn define(stage: &usd::Stage, path: impl Into<sdf::Path>) -> Boundable {
+	pub fn define(stage: &usd::Stage, path: impl Into<sdf::Path>) -> Boundable<'_> {
 		Boundable(usd::SchemaBase::new(stage.prim_at_path(path)))
 	}
 
@@ -91,7 +91,7 @@ impl<'a> std::ops::Deref for Boundable<'a> {
 pub struct Gprim<'a>(usd::SchemaBase<'a>);
 
 impl Gprim<'_> {
-	pub fn define(stage: &usd::Stage, path: impl Into<sdf::Path>) -> Gprim {
+	pub fn define(stage: &usd::Stage, path: impl Into<sdf::Path>) -> Gprim<'_> {
 		Gprim(usd::SchemaBase::new(stage.prim_at_path(path)))
 	}
 
@@ -108,15 +108,15 @@ impl<'a> std::ops::Deref for Gprim<'a> {
 pub struct PointBased<'a>(usd::SchemaBase<'a>);
 
 impl PointBased<'_> {
-	pub fn define(stage: &usd::Stage, path: impl Into<sdf::Path>) -> PointBased {
+	pub fn define(stage: &usd::Stage, path: impl Into<sdf::Path>) -> PointBased<'_> {
 		PointBased(usd::SchemaBase::new(stage.prim_at_path(path)))
 	}
 
-	pub fn points_attr(&self) -> usd::Attribute {
+	pub fn points_attr(&self) -> usd::Attribute<'_> {
 		self.prim().attribute(&TOKENS.points)
 	}
 
-	pub fn normals_attr(&self) -> usd::Attribute {
+	pub fn normals_attr(&self) -> usd::Attribute<'_> {
 		self.prim().attribute(&TOKENS.normals)
 	}
 
@@ -133,15 +133,15 @@ impl<'a> std::ops::Deref for PointBased<'a> {
 pub struct Mesh<'a>(usd::SchemaBase<'a>);
 
 impl Mesh<'_> {
-	pub fn define(stage: &usd::Stage, path: impl Into<sdf::Path>) -> Mesh {
+	pub fn define(stage: &usd::Stage, path: impl Into<sdf::Path>) -> Mesh<'_> {
 		Mesh(usd::SchemaBase::new(stage.prim_at_path(path)))
 	}
 
-	pub fn face_vertex_indices_attr(&self) -> usd::Attribute {
+	pub fn face_vertex_indices_attr(&self) -> usd::Attribute<'_> {
 		self.prim().attribute(&TOKENS.face_vertex_indices)
 	}
 
-	pub fn face_vertex_counts_attr(&self) -> usd::Attribute {
+	pub fn face_vertex_counts_attr(&self) -> usd::Attribute<'_> {
 		self.prim().attribute(&TOKENS.face_vertex_counts)
 	}
 
@@ -218,8 +218,10 @@ impl<'a> std::ops::Deref for PointInstancer<'a> {
 // --- (BEGIN CUSTOM CODE) ---
 
 pub fn triangulate(mesh: &Mesh) -> Vec<i32> {
-	let face_vertex_counts = mesh.face_vertex_counts_attr().get::<Vec<i32>>();
-	let face_vertex_indices = mesh.face_vertex_indices_attr().get::<Vec<i32>>();
+	use crate::vt;
+
+	let face_vertex_counts = mesh.face_vertex_counts_attr().get::<vt::Array<i32>>();
+	let face_vertex_indices = mesh.face_vertex_indices_attr().get::<vt::Array<i32>>();
 
 	let mut indices = vec![];
 

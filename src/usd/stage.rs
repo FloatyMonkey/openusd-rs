@@ -17,7 +17,7 @@ impl Stage {
 		let path = asset_path.as_ref();
 		let data: Box<dyn AbstractData> = if let Some(extension) = path.extension() {
 			if extension == "usdc" {
-				Box::new(UsdcFile::open(path))
+				Box::new(UsdcFile::open(path).unwrap())
 			} else if extension == "usda" {
 				match std::fs::read_to_string(path) {
 					Ok(content) => match usda::parser::parse(&content) {
@@ -36,11 +36,11 @@ impl Stage {
 		Stage { data }
 	}
 
-	pub fn pseudo_root(&self) -> Prim {
+	pub fn pseudo_root(&self) -> Prim<'_> {
 		Prim::new(self, sdf::Path::absolute_root_path())
 	}
 
-	pub fn prim_at_path(&self, path: impl Into<sdf::Path>) -> Prim {
+	pub fn prim_at_path(&self, path: impl Into<sdf::Path>) -> Prim<'_> {
 		Prim::new(self, path.into())
 	}
 

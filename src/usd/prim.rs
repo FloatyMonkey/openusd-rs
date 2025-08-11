@@ -1,5 +1,5 @@
 use super::{Attribute, Object, Property, Relationship};
-use crate::{sdf, tf, usd};
+use crate::{sdf, tf, usd, vt};
 
 /// [`usd::Prim`] is the sole persistent scenegraph object on a [`usd::Stage`],
 /// and is the embodiment of a "Prim" as described in the *Universal Scene Description Composition Compendium*.
@@ -67,7 +67,7 @@ impl<'a> std::ops::Deref for Prim<'a> {
 pub struct ChildrenIter<'a> {
 	stage: &'a usd::Stage,
 	base_path: sdf::Path,
-	prim_children: Vec<tf::Token>,
+	prim_children: vt::Array<tf::Token>,
 	index: usize,
 }
 
@@ -79,7 +79,7 @@ impl<'a> ChildrenIter<'a> {
 			prim_children: stage
 				.data()
 				.get(&path, &sdf::CHILDREN_KEYS.prim_children)
-				.map(|v| v.get::<Vec<tf::Token>>())
+				.map(|v| v.get::<vt::Array<tf::Token>>())
 				.flatten()
 				.unwrap_or_default(),
 			index: 0,

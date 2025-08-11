@@ -27,31 +27,31 @@ declare_public_tokens!(Tokens, TOKENS, [
 pub struct LightAPI<'a>(usd::SchemaBase<'a>);
 
 impl LightAPI<'_> {
-	pub fn define(stage: &usd::Stage, path: impl Into<sdf::Path>) -> LightAPI {
+	pub fn define(stage: &usd::Stage, path: impl Into<sdf::Path>) -> LightAPI<'_> {
 		LightAPI(usd::SchemaBase::new(stage.prim_at_path(path)))
 	}
 
 	/// Scales the brightness of the light linearly.
-	pub fn intensity_attr(&self) -> usd::Attribute {
+	pub fn intensity_attr(&self) -> usd::Attribute<'_> {
 		self.prim().attribute(&TOKENS.inputs_intensity)
 	}
 
 	/// Scales the brightness of the light exponentially as a power
 	/// of 2 (similar to an F-stop control over exposure). The result
 	/// is multiplied against the intensity.
-	pub fn exposure_attr(&self) -> usd::Attribute {
+	pub fn exposure_attr(&self) -> usd::Attribute<'_> {
 		self.prim().attribute(&TOKENS.inputs_exposure)
 	}
 
 	/// A multiplier for the effect of this light on the diffuse
 	/// response of materials. This is a non-physical control.
-	pub fn diffuse_attr(&self) -> usd::Attribute {
+	pub fn diffuse_attr(&self) -> usd::Attribute<'_> {
 		self.prim().attribute(&TOKENS.inputs_diffuse)
 	}
 
 	/// A multiplier for the effect of this light on the specular
 	/// response of materials. This is a non-physical control.
-	pub fn specular_attr(&self) -> usd::Attribute {
+	pub fn specular_attr(&self) -> usd::Attribute<'_> {
 		self.prim().attribute(&TOKENS.inputs_specular)
 	}
 
@@ -62,19 +62,20 @@ impl LightAPI<'_> {
 	/// This makes it easier to independently adjust the brightness and size
 	/// of the light, by causing the total illumination provided by a light to
 	/// not vary with the area or angular size of the light.
-	pub fn normalize_attr(&self) -> usd::Attribute {
+	pub fn normalize_attr(&self) -> usd::Attribute<'_> {
 		self.prim().attribute(&TOKENS.inputs_normalize)
 	}
 
 	/// The color of emitted light, in the rendering color space.
 	/// This color is just multiplied with the emission.
-	pub fn color_attr(&self) -> usd::Attribute {
+	pub fn color_attr(&self) -> usd::Attribute<'_> {
 		self.prim().attribute(&TOKENS.inputs_color)
 	}
 
 	/// Enables using colorTemperature.
-	pub fn enable_color_temperature_attr(&self) -> usd::Attribute {
-		self.prim().attribute(&TOKENS.inputs_enable_color_temperature)
+	pub fn enable_color_temperature_attr(&self) -> usd::Attribute<'_> {
+		self.prim()
+			.attribute(&TOKENS.inputs_enable_color_temperature)
 	}
 
 	/// Color temperature, in degrees Kelvin, representing the
@@ -82,7 +83,7 @@ impl LightAPI<'_> {
 	/// values are warmer and higher values are cooler.  The valid range
 	/// is from 1000 to 10000. Only takes effect when
 	/// enableColorTemperature is set to true.
-	pub fn color_temperature_attr(&self) -> usd::Attribute {
+	pub fn color_temperature_attr(&self) -> usd::Attribute<'_> {
 		self.prim().attribute(&TOKENS.inputs_color_temperature)
 	}
 
@@ -100,7 +101,7 @@ impl<'a> std::ops::Deref for LightAPI<'a> {
 pub struct BoundableLightBase<'a>(usd::SchemaBase<'a>);
 
 impl BoundableLightBase<'_> {
-	pub fn define(stage: &usd::Stage, path: impl Into<sdf::Path>) -> BoundableLightBase {
+	pub fn define(stage: &usd::Stage, path: impl Into<sdf::Path>) -> BoundableLightBase<'_> {
 		BoundableLightBase(usd::SchemaBase::new(stage.prim_at_path(path)))
 	}
 
@@ -118,7 +119,7 @@ impl<'a> std::ops::Deref for BoundableLightBase<'a> {
 pub struct NonboundableLightBase<'a>(usd::SchemaBase<'a>);
 
 impl NonboundableLightBase<'_> {
-	pub fn define(stage: &usd::Stage, path: impl Into<sdf::Path>) -> NonboundableLightBase {
+	pub fn define(stage: &usd::Stage, path: impl Into<sdf::Path>) -> NonboundableLightBase<'_> {
 		NonboundableLightBase(usd::SchemaBase::new(stage.prim_at_path(path)))
 	}
 
@@ -137,12 +138,12 @@ impl<'a> std::ops::Deref for NonboundableLightBase<'a> {
 pub struct DiskLight<'a>(usd::SchemaBase<'a>);
 
 impl DiskLight<'_> {
-	pub fn define(stage: &usd::Stage, path: impl Into<sdf::Path>) -> DiskLight {
+	pub fn define(stage: &usd::Stage, path: impl Into<sdf::Path>) -> DiskLight<'_> {
 		DiskLight(usd::SchemaBase::new(stage.prim_at_path(path)))
 	}
 
 	/// Radius of the disk.
-	pub fn radius_attr(&self) -> usd::Attribute {
+	pub fn radius_attr(&self) -> usd::Attribute<'_> {
 		self.prim().attribute(&TOKENS.inputs_radius)
 	}
 
@@ -164,22 +165,22 @@ impl<'a> std::ops::Deref for DiskLight<'a> {
 pub struct RectLight<'a>(usd::SchemaBase<'a>);
 
 impl RectLight<'_> {
-	pub fn define(stage: &usd::Stage, path: impl Into<sdf::Path>) -> RectLight {
+	pub fn define(stage: &usd::Stage, path: impl Into<sdf::Path>) -> RectLight<'_> {
 		RectLight(usd::SchemaBase::new(stage.prim_at_path(path)))
 	}
 
 	/// Width of the rectangle, in the local X axis.
-	pub fn width_attr(&self) -> usd::Attribute {
+	pub fn width_attr(&self) -> usd::Attribute<'_> {
 		self.prim().attribute(&TOKENS.inputs_width)
 	}
 
 	/// Height of the rectangle, in the local Y axis.
-	pub fn height_attr(&self) -> usd::Attribute {
+	pub fn height_attr(&self) -> usd::Attribute<'_> {
 		self.prim().attribute(&TOKENS.inputs_height)
 	}
 
 	/// A color texture to use on the rectangle.
-	pub fn texture_file_attr(&self) -> usd::Attribute {
+	pub fn texture_file_attr(&self) -> usd::Attribute<'_> {
 		self.prim().attribute(&TOKENS.inputs_texture_file)
 	}
 
@@ -197,12 +198,12 @@ impl<'a> std::ops::Deref for RectLight<'a> {
 pub struct SphereLight<'a>(usd::SchemaBase<'a>);
 
 impl SphereLight<'_> {
-	pub fn define(stage: &usd::Stage, path: impl Into<sdf::Path>) -> SphereLight {
+	pub fn define(stage: &usd::Stage, path: impl Into<sdf::Path>) -> SphereLight<'_> {
 		SphereLight(usd::SchemaBase::new(stage.prim_at_path(path)))
 	}
 
 	/// Radius of the sphere.
-	pub fn radius_attr(&self) -> usd::Attribute {
+	pub fn radius_attr(&self) -> usd::Attribute<'_> {
 		self.prim().attribute(&TOKENS.inputs_radius)
 	}
 
@@ -210,7 +211,7 @@ impl SphereLight<'_> {
 	/// light (effectively, a zero-radius sphere) by renderers that
 	/// benefit from non-area lighting. Renderers that only support
 	/// area lights can disregard this.
-	pub fn treat_as_point_attr(&self) -> usd::Attribute {
+	pub fn treat_as_point_attr(&self) -> usd::Attribute<'_> {
 		self.prim().attribute(&TOKENS.treat_as_point)
 	}
 
@@ -233,13 +234,13 @@ impl<'a> std::ops::Deref for SphereLight<'a> {
 pub struct DomeLight<'a>(usd::SchemaBase<'a>);
 
 impl DomeLight<'_> {
-	pub fn define(stage: &usd::Stage, path: impl Into<sdf::Path>) -> DomeLight {
+	pub fn define(stage: &usd::Stage, path: impl Into<sdf::Path>) -> DomeLight<'_> {
 		DomeLight(usd::SchemaBase::new(stage.prim_at_path(path)))
 	}
 
 	/// A color texture to use on the dome, such as an HDR (high
 	/// dynamic range) texture intended for IBL (image based lighting).
-	pub fn texture_file_attr(&self) -> usd::Attribute {
+	pub fn texture_file_attr(&self) -> usd::Attribute<'_> {
 		self.prim().attribute(&TOKENS.inputs_texture_file)
 	}
 
@@ -256,19 +257,19 @@ impl DomeLight<'_> {
 	/// at the edges.
 	/// - cubeMapVerticalCross: A cube map with faces laid out as a
 	/// vertical cross.
-	pub fn texture_format_attr(&self) -> usd::Attribute {
+	pub fn texture_format_attr(&self) -> usd::Attribute<'_> {
 		self.prim().attribute(&TOKENS.inputs_texture_format)
 	}
 
 	/// Optional portals to guide light sampling.
-	pub fn portals_rel(&self) -> usd::Relationship {
+	pub fn portals_rel(&self) -> usd::Relationship<'_> {
 		self.prim().relationship(&TOKENS.portals)
 	}
 
 	/// The radius of guide geometry to use to visualize the dome light.
 	/// The default is 1 km for scenes whose metersPerUnit is the USD default of
 	/// 0.01 (i.e., 1 world unit is 1 cm).
-	pub fn guide_radius_attr(&self) -> usd::Attribute {
+	pub fn guide_radius_attr(&self) -> usd::Attribute<'_> {
 		self.prim().attribute(&TOKENS.guide_radius)
 	}
 

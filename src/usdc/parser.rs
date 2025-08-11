@@ -1,4 +1,4 @@
-use super::integer_coding::*;
+use super::{compression, integer_coding::*};
 use crate::io_ext::{ReadBytesExt, WriteBytesExt};
 use crate::{gf, sdf, tf, vt};
 
@@ -317,89 +317,6 @@ fn read_toc(cursor: &mut Cursor<&[u8]>) -> Result<TableOfContents> {
 	Ok(TableOfContents { sections })
 }
 
-fn decompress_from_buffer(compressed_buffer: &[u8], workspace_size: usize) -> Vec<u8> {
-	let mut workspace_buffer = vec![0u8; workspace_size];
-	let mut offset = 1;
-	let count = compressed_buffer[0] as i32;
-	let mut total_decompressed = 0;
-	let chunk_size = compressed_buffer.len() - 1;
-
-	for _ in 0..count.max(1) {
-		let mut current_chunk_size = chunk_size;
-
-		if count != 0 {
-			let size_bytes: [u8; 4] = compressed_buffer[offset..offset + 4]
-				.try_into()
-				.expect("Slice with incorrect length");
-			current_chunk_size = i32::from_le_bytes(size_bytes) as usize;
-			offset += 4;
-		}
-
-		let decompressed_data = lz4_flex::decompress(
-			&compressed_buffer[offset..offset + current_chunk_size],
-			workspace_buffer.len() - total_decompressed,
-		)
-		.unwrap();
-
-		let decompressed_size = decompressed_data.len();
-		if decompressed_size > workspace_buffer.len() - total_decompressed {
-			panic!("Unexpected decompressed chunk size");
-		}
-
-		workspace_buffer[total_decompressed..total_decompressed + decompressed_size]
-			.copy_from_slice(&decompressed_data);
-
-		offset += current_chunk_size;
-		total_decompressed += decompressed_size;
-	}
-
-	workspace_buffer.truncate(total_decompressed);
-	workspace_buffer
-}
-
-const LZ4_MAX_INPUT_SIZE: usize = 0x7E000000;
-
-fn get_max_input_size() -> usize {
-	127 * LZ4_MAX_INPUT_SIZE
-}
-
-fn lz4_compress_bound(size: usize) -> usize {
-	if size > LZ4_MAX_INPUT_SIZE {
-		return 0;
-	}
-	size + (size / 255) + 16
-}
-
-fn get_compressed_buffer_size(input_size: usize) -> usize {
-	if input_size > get_max_input_size() {
-		return 0;
-	}
-
-	if input_size <= LZ4_MAX_INPUT_SIZE {
-		return lz4_compress_bound(input_size) + 1;
-	}
-
-	let n_whole_chunks = input_size / LZ4_MAX_INPUT_SIZE;
-	let part_chunk_sz = input_size % LZ4_MAX_INPUT_SIZE;
-	let mut sz = 1 + n_whole_chunks * (lz4_compress_bound(LZ4_MAX_INPUT_SIZE) + 4);
-	if part_chunk_sz > 0 {
-		sz += lz4_compress_bound(part_chunk_sz) + 4;
-	}
-	sz
-}
-
-fn read_compressed_ints<T: IntMapper>(cursor: &mut Cursor<&[u8]>, count: usize) -> Result<Vec<T>> {
-	let compressed_size = cursor.read_as::<u64>()?;
-	let workspace_size = get_compressed_buffer_size(get_encoded_buffer_size::<T>(count));
-
-	let mut compressed_buffer = vec![0; compressed_size as usize];
-	cursor.read_exact(&mut compressed_buffer)?;
-
-	let uncompressed_buffer = decompress_from_buffer(&compressed_buffer, workspace_size);
-
-	decode_integers::<T>(&uncompressed_buffer, count)
-}
-
 fn read_tokens(cursor: &mut Cursor<&[u8]>, section: &Section) -> Result<Vec<tf::Token>> {
 	cursor.set_position(section.start);
 
@@ -412,7 +329,8 @@ fn read_tokens(cursor: &mut Cursor<&[u8]>, section: &Section) -> Result<Vec<tf::
 	let mut compressed_buffer = vec![0; compressed_size as usize];
 	cursor.read_exact(&mut compressed_buffer)?;
 
-	let mut buffer = decompress_from_buffer(&compressed_buffer, uncompressed_size as usize);
+	let mut buffer =
+		compression::decompress_from_buffer(&compressed_buffer, uncompressed_size as usize);
 
 	if buffer.last() != Some(&b'\0') {
 		panic!("Tokens section not null-terminated in crate file");
@@ -441,8 +359,7 @@ fn read_strings(cursor: &mut Cursor<&[u8]>, section: &Section) -> Result<Vec<Ind
 	cursor.set_position(section.start);
 
 	let indices_count = cursor.read_as::<u64>()?;
-
-	let mut indices = vec![];
+	let mut indices = Vec::with_capacity(indices_count as usize);
 
 	for _ in 0..indices_count {
 		indices.push(cursor.read_as::<Index>()?);
@@ -462,7 +379,8 @@ fn read_fields(cursor: &mut Cursor<&[u8]>, section: &Section) -> Result<Vec<Fiel
 	let mut compressed_buffer = vec![0; flag_size as usize];
 	cursor.read_exact(&mut compressed_buffer)?;
 
-	let uncompressed_buffer = decompress_from_buffer(&compressed_buffer, field_count * 8);
+	let uncompressed_buffer =
+		compression::decompress_from_buffer(&compressed_buffer, field_count * 8);
 	let mut uncompressed_cursor = Cursor::new(uncompressed_buffer.as_slice());
 
 	let fields = indices
@@ -538,7 +456,7 @@ fn read_specs(cursor: &mut Cursor<&[u8]>, section: &Section) -> Result<Vec<Spec>
 /// Don't compress arrays smaller than this.
 const MIN_COMPRESSED_ARRAY_SIZE: usize = 16;
 
-fn read_int_array<T: Clone + IntMapper>(
+fn read_int_array<T: Clone + Integer>(
 	cursor: &mut Cursor<&[u8]>,
 	rep: ValueRep,
 ) -> Result<vt::Array<T>> {

@@ -1,3 +1,4 @@
+mod compression;
 mod integer_coding;
 mod parser;
 

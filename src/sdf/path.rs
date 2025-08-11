@@ -57,6 +57,87 @@ impl Path {
 			} || *self == Self::reflexive_relative_path())
 	}
 
+	/// Return whether this path and `prefix` are not the empty path and this path has `prefix` as a prefix.
+	pub fn has_prefix(&self, prefix: &Self) -> bool {
+		if self.is_empty() || prefix.is_empty() {
+			return false;
+		}
+
+		if prefix.prop != INVALID_NODE_HANDLE {
+			// The prefix is a property-like path, in order for it to be a prefix of
+			// this path, we must also have a property part, and our prim part must
+			// be the same as the prefix's prim part.
+			if self.prim != prefix.prim || self.prop == INVALID_NODE_HANDLE {
+				return false;
+			}
+
+			// Now walk up property parts until we hit prefix.prop or we recurse above its depth.
+			let prop_pool = PATH_PROP_PART_POOL.read().unwrap();
+			let mut prop_node = prop_pool.get(self.prop);
+			let prefix_prop_node = prop_pool.get(prefix.prop);
+
+			while prop_node.is_some() && prop_node != prefix_prop_node {
+				prop_node = prop_pool.get(prop_node.unwrap().parent);
+			}
+
+			prop_node == prefix_prop_node
+		} else {
+			// The prefix is a prim-like path. Walk up nodes until we achieve the
+			// same depth as the prefix, then just check for equality.
+
+			let prim_pool = PATH_PRIM_PART_POOL.read().unwrap();
+			let mut prim_node = prim_pool.get(self.prim).unwrap();
+
+			if prim_node.is_absolute_path() && prefix.is_absolute_root() {
+				return true;
+			}
+
+			let prefix_prim_node = prim_pool.get(prefix.prim).unwrap();
+
+			let prefix_depth = prefix_prim_node.element_count();
+			let mut cur_depth = prim_node.element_count();
+
+			if cur_depth < prefix_depth {
+				return false;
+			}
+
+			while cur_depth > prefix_depth {
+				prim_node = prim_pool.get(prim_node.parent).unwrap();
+				cur_depth -= 1;
+			}
+
+			prim_node == prefix_prim_node
+		}
+	}
+
+	/// Return a range for iterating over the ancestors of this path.
+	///
+	/// The range provides iteration over the prefixes of a path, ordered from longest to shortest.
+	/// Starting with the path itself and ending with a single element path, not including the empty/root path.
+	pub fn ancestors_range(&self) -> PathAncestorsRange {
+		PathAncestorsRange { path: self.clone() }
+	}
+
+	/// Returns the name of the prim, property or relational attribute identified by the path.
+	pub fn name(&self) -> String {
+		if self.prop != INVALID_NODE_HANDLE {
+			let prop_pool = PATH_PROP_PART_POOL.read().unwrap();
+			let prop_node = prop_pool.get(self.prop).unwrap();
+			return prop_node.name().to_string();
+		}
+
+		if self.prim != INVALID_NODE_HANDLE {
+			let prim_pool = PATH_PRIM_PART_POOL.read().unwrap();
+			let prim_node = prim_pool.get(self.prim).unwrap();
+			return prim_node.name().to_string();
+		}
+
+		String::new()
+	}
+}
+
+/// Creating new paths by modifying existing paths.
+impl Path {
 	/// Return the path that identifies this path's namespace parent.
 	///
 	/// Note that the parent path of a relative parent path (`..`) is a relative grandparent path (`../..`).
@@ -114,34 +195,6 @@ impl Path {
 		}
 	}
 
-	/// Return a range for iterating over the ancestors of this path.
-	///
-	/// The range provides iteration over the prefixes of a path, ordered from longest to shortest.
-	/// Starting with the path itself and ending with a single element path, not including the empty/root path.
-	pub fn ancestors_range(&self) -> PathAncestorsRange {
-		PathAncestorsRange { path: self.clone() }
-	}
-
-	/// Returns the name of the prim, property or relational attribute identified by the path.
-	pub fn name(&self) -> String {
-		if self.prop != INVALID_NODE_HANDLE {
-			let prop_pool = PATH_PROP_PART_POOL.read().unwrap();
-			let prop_node = prop_pool.get(self.prop).unwrap();
-			return prop_node.name().to_string();
-		}
-
-		if self.prim != INVALID_NODE_HANDLE {
-			let prim_pool = PATH_PRIM_PART_POOL.read().unwrap();
-			let prim_node = prim_pool.get(self.prim).unwrap();
-			return prim_node.name().to_string();
-		}
-
-		String::new()
-	}
-}
-
-/// Creating new paths by modifying existing paths.
-impl Path {
 	/// Creates a path by appending an element for `child_name` to this path.
 	///
 	/// This path must be a prim path, the AbsoluteRootPath or the ReflexiveRelativePath.
@@ -372,7 +425,24 @@ mod tests {
 	}
 
 	#[test]
+	fn has_prefix() {
+		let path = p("/foo/bar/baz.prop");
+
+		assert!(!Path::empty_path().has_prefix(&path));
+		assert!(!path.has_prefix(&Path::empty_path()));
+
+		assert!(path.has_prefix(&p("/foo/bar/baz.prop")));
+		assert!(path.has_prefix(&p("/foo/bar/baz")));
+		assert!(path.has_prefix(&p("/foo/bar")));
+		assert!(path.has_prefix(&p("/foo")));
+
+		assert!(!path.has_prefix(&p("/bar/baz")));
+		assert!(!path.has_prefix(&p("/bar")));
+	}
+
+	#[test]
 	fn parent_path() {
+		assert_eq!(Path::empty_path().parent_path(), Path::empty_path());
 		assert_eq!(p("/foo").parent_path(), Path::absolute_root_path());
 		assert_eq!(p("/foo/bar").parent_path(), p("/foo"));
 		assert_eq!(p("foo/bar").parent_path(), p("foo"));

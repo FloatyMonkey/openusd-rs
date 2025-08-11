@@ -803,14 +803,17 @@ fn unpack_value_rep(file: &UsdcFile, value: ValueRep) -> Result<Option<vt::Value
 
 
 
-		Type::PathVector => {
-      let indices = Vec::<Index>::read(self, &mut cursor);
-		  let vector = indices
-		    .iter()
-				.map(|i| self.paths[*i as usize].clone())
-				.collect::<Vec<_>>();
-		  vt::Value::new(vector)
-		}
+
+    Type::PathVector => {
+        let indices: Vec<Index> = Vec::<Index>::read(file, &mut cursor)?; // if read() returns Result
+        let vector = indices
+            .iter()
+            .map(|&i| file.paths[i as usize].clone())
+            .collect::<vt::Array<sdf::Path>>();
+        vt::Value::new(vector)
+    }
+
+
 
 		Type::TokenVector => {
 			let indices = Vec::<Index>::read(file, &mut cursor)?;

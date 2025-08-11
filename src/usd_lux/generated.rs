@@ -74,8 +74,7 @@ impl LightAPI<'_> {
 
 	/// Enables using colorTemperature.
 	pub fn enable_color_temperature_attr(&self) -> usd::Attribute<'_> {
-		self.prim()
-			.attribute(&TOKENS.inputs_enable_color_temperature)
+		self.prim().attribute(&TOKENS.inputs_enable_color_temperature)
 	}
 
 	/// Color temperature, in degrees Kelvin, representing the

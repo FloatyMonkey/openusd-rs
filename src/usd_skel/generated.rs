@@ -198,8 +198,7 @@ impl SkelBindingAPI<'_> {
 	/// down to all the leaf gprims. If this transform is unset, an identity
 	/// transform is used instead.
 	pub fn geom_bind_transform_attr(&self) -> usd::Attribute<'_> {
-		self.prim()
-			.attribute(&TOKENS.primvars_skel_geom_bind_transform)
+		self.prim().attribute(&TOKENS.primvars_skel_geom_bind_transform)
 	}
 
 	/// An (optional) array of tokens defining the list of

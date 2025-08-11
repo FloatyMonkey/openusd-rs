@@ -23,7 +23,6 @@ impl<'a> Relationship<'a> {
             .unwrap_or_default()
     }
 }
-}
 
 impl<'a> std::ops::Deref for Relationship<'a> {
 	type Target = Property<'a>;

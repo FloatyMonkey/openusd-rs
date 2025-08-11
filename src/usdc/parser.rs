@@ -801,6 +801,17 @@ fn unpack_value_rep(file: &UsdcFile, value: ValueRep) -> Result<Option<vt::Value
 		Type::Matrix3d => read_pod::<gf::Matrix3d>(&mut cursor)?.into(),
 		Type::Matrix4d => read_pod::<gf::Matrix4d>(&mut cursor)?.into(),
 
+
+
+		Type::PathVector => {
+      let indices = Vec::<Index>::read(self, &mut cursor);
+		  let vector = indices
+		    .iter()
+				.map(|i| self.paths[*i as usize].clone())
+				.collect::<Vec<_>>();
+		  vt::Value::new(vector)
+		}
+
 		Type::TokenVector => {
 			let indices = Vec::<Index>::read(file, &mut cursor)?;
 			let vector = indices

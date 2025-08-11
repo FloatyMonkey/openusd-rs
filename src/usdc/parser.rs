@@ -740,117 +740,104 @@ fn read_inline(val: ValueRep) -> Option<vt::Value> {
 fn unpack_value_rep(file: &UsdcFile, value: ValueRep) -> Result<Option<vt::Value>> {
 	let buffer = &file.buffer;
 
+	if value.ty() == Type::Token && !value.is_array() && value.is_inlined() {
+		let token_index = value.payload();
+		let token = file.tokens[token_index as usize].clone();
+
+		return Ok(Some(vt::Value::new(token)));
+	}
+
+	if let Some(v) = read_inline(value) {
+		return Ok(Some(v));
+	}
+
+	let mut cursor = Cursor::new(buffer.as_slice());
+	cursor.set_position(value.payload());
+
+	Ok(Some(match value.ty() {
+		Type::Half if value.is_array() => read_float_array::<f16>(&mut cursor, value)?.into(),
+		Type::Float if value.is_array() => read_float_array::<f32>(&mut cursor, value)?.into(),
+		Type::Double if value.is_array() => read_float_array::<f64>(&mut cursor, value)?.into(),
+
+		Type::Float if value.is_inlined() => {
+			let val = value.payload() as u32;
+			f32::from_bits(val).into()
+		}
+
+		Type::AssetPath => {
+			let token = file.tokens[value.payload() as usize].clone();
+			vt::Value::new(sdf::AssetPath {
+				authored_path: token.as_str().into(),
+				evaluated_path: String::new(),
+				resolved_path: "".into(),
+			})
+		}
+
+		Type::Int if value.is_array() => read_int_array::<i32>(&mut cursor, value)?.into(),
+		Type::UInt if value.is_array() => read_int_array::<u32>(&mut cursor, value)?.into(),
+
+		Type::Vec3f if value.is_array() => read_pod_vec::<gf::Vec3f>(&mut cursor)?.into(),
+
+		Type::Quath => read_pod::<gf::Quath>(&mut cursor)?.into(),
+		Type::Quatf => read_pod::<gf::Quatf>(&mut cursor)?.into(),
+		Type::Quatd => read_pod::<gf::Quatd>(&mut cursor)?.into(),
+
+		Type::Vec2h => read_pod::<gf::Vec2h>(&mut cursor)?.into(),
+		Type::Vec2f => read_pod::<gf::Vec2f>(&mut cursor)?.into(),
+		Type::Vec2d => read_pod::<gf::Vec2d>(&mut cursor)?.into(),
+		Type::Vec2i => read_pod::<gf::Vec2i>(&mut cursor)?.into(),
+
+		Type::Vec3h => read_pod::<gf::Vec3h>(&mut cursor)?.into(),
+		Type::Vec3f => read_pod::<gf::Vec3f>(&mut cursor)?.into(),
+		Type::Vec3d => read_pod::<gf::Vec3d>(&mut cursor)?.into(),
+		Type::Vec3i => read_pod::<gf::Vec3i>(&mut cursor)?.into(),
+
+		Type::Vec4h => read_pod::<gf::Vec4h>(&mut cursor)?.into(),
+		Type::Vec4f => read_pod::<gf::Vec4f>(&mut cursor)?.into(),
+		Type::Vec4d => read_pod::<gf::Vec4d>(&mut cursor)?.into(),
+		Type::Vec4i => read_pod::<gf::Vec4i>(&mut cursor)?.into(),
+
+		Type::Matrix2d => read_pod::<gf::Matrix2d>(&mut cursor)?.into(),
+		Type::Matrix3d => read_pod::<gf::Matrix3d>(&mut cursor)?.into(),
+		Type::Matrix4d => read_pod::<gf::Matrix4d>(&mut cursor)?.into(),
+
+		Type::TokenVector => {
+			let indices = Vec::<Index>::read(file, &mut cursor)?;
+			let vector = indices
+				.iter()
+				.map(|i| file.tokens[*i as usize].clone())
+				.collect::<vt::Array<_>>();
+			vt::Value::new(vector)
+		}
+
+		Type::Token if value.is_array() => {
+			let indices = Vec::<Index>::read(file, &mut cursor)?;
+			let vector = indices
+				.iter()
+				.map(|i| file.tokens[*i as usize].clone())
+				.collect::<vt::Array<_>>();
+			vt::Value::new(vector)
+		}
+
+		Type::IntListOp => sdf::IntListOp::read(file, &mut cursor)?.into(),
+		Type::UIntListOp => sdf::UIntListOp::read(file, &mut cursor)?.into(),
+		Type::Int64ListOp => sdf::Int64ListOp::read(file, &mut cursor)?.into(),
+		Type::UInt64ListOp => sdf::UInt64ListOp::read(file, &mut cursor)?.into(),
+
+		Type::Dictionary => vt::Dictionary::read(file, &mut cursor)?.into(),
+
+		_ => return Ok(None),
+	}))
+}
+
+impl sdf::AbstractData for UsdcFile {
+	fn get(&self, path: &sdf::Path, field: &tf::Token) -> Option<vt::Value> {
+		let path_index = self.paths.iter().position(|p| *p == *path)?;
+
 		let spec = self
 			.specs
 			.iter()
 			.find(|s| s.path_index == path_index as Index)?;
-
-		let field = fields(self, spec).find(|f| self.tokens[f.token_index as usize] == *field)?;
-
-<<<<<<< HEAD
-		let buffer = &self.buffer;
-		let value = field.value_rep;
-
-		if value.ty() == Type::Token && !value.is_array() && value.is_inlined() {
-			let token_index = value.payload();
-			let token = self.tokens[token_index as usize].clone();
-
-			return Some(vt::Value::new(token));
-		}
-
-		if let Some(v) = read_inline(value) {
-			return Some(v);
-		}
-
-		let mut cursor = Cursor::new(buffer.as_slice());
-		cursor.set_position(value.payload());
-
-		Some(match value.ty() {
-			Type::Half if value.is_array() => read_float_array::<f16>(&mut cursor, value).into(),
-			Type::Float if value.is_array() => read_float_array::<f32>(&mut cursor, value).into(),
-			Type::Double if value.is_array() => read_float_array::<f64>(&mut cursor, value).into(),
-
-			Type::Float if value.is_inlined() => {
-				let val = value.payload() as u32;
-				f32::from_bits(val).into()
-			}
-
-			Type::AssetPath => {
-				let token = self.tokens[value.payload() as usize].clone();
-				vt::Value::new(sdf::AssetPath {
-					authored_path: token.as_str().into(),
-					evaluated_path: String::new(),
-					resolved_path: "".into(),
-				})
-			}
-
-			Type::Int if value.is_array() => read_int_array::<i32>(&mut cursor, value).into(),
-			Type::UInt if value.is_array() => read_int_array::<u32>(&mut cursor, value).into(),
-
-			Type::Vec3f if value.is_array() => read_pod_vec::<gf::Vec3f>(&mut cursor).into(),
-
-			Type::Quath => read_pod::<gf::Quath>(&mut cursor).into(),
-			Type::Quatf => read_pod::<gf::Quatf>(&mut cursor).into(),
-			Type::Quatd => read_pod::<gf::Quatd>(&mut cursor).into(),
-
-			Type::Vec2h => read_pod::<gf::Vec2h>(&mut cursor).into(),
-			Type::Vec2f => read_pod::<gf::Vec2f>(&mut cursor).into(),
-			Type::Vec2d => read_pod::<gf::Vec2d>(&mut cursor).into(),
-			Type::Vec2i => read_pod::<gf::Vec2i>(&mut cursor).into(),
-
-			Type::Vec3h => read_pod::<gf::Vec3h>(&mut cursor).into(),
-			Type::Vec3f => read_pod::<gf::Vec3f>(&mut cursor).into(),
-			Type::Vec3d => read_pod::<gf::Vec3d>(&mut cursor).into(),
-			Type::Vec3i => read_pod::<gf::Vec3i>(&mut cursor).into(),
-
-			Type::Vec4h => read_pod::<gf::Vec4h>(&mut cursor).into(),
-			Type::Vec4f => read_pod::<gf::Vec4f>(&mut cursor).into(),
-			Type::Vec4d => read_pod::<gf::Vec4d>(&mut cursor).into(),
-			Type::Vec4i => read_pod::<gf::Vec4i>(&mut cursor).into(),
-
-			Type::Matrix2d => read_pod::<gf::Matrix2d>(&mut cursor).into(),
-			Type::Matrix3d => read_pod::<gf::Matrix3d>(&mut cursor).into(),
-			Type::Matrix4d => read_pod::<gf::Matrix4d>(&mut cursor).into(),
-
-			Type::PathVector => {
-				let indices = Vec::<Index>::read(self, &mut cursor);
-				let vector = indices
-					.iter()
-					.map(|i| self.paths[*i as usize].clone())
-					.collect::<Vec<_>>();
-				vt::Value::new(vector)
-			}
-
-			//Type::Path if value.is_array() => {
-			//	let indices = Vec::<Index>::read(self, &mut cursor);
-			//	let vector = indices
-			//		.iter()
-			//		.map(|i| self.paths[*i as usize].clone())
-			//		.collect::<Vec<_>>();
-			//	vt::Value::new(vector)
-			//}
-			Type::TokenVector => {
-				let indices = Vec::<Index>::read(self, &mut cursor);
-				let vector = indices
-					.iter()
-					.map(|i| self.tokens[*i as usize].clone())
-					.collect::<Vec<_>>();
-				vt::Value::new(vector)
-			}
-			Type::Token if value.is_array() => {
-				let indices = Vec::<Index>::read(self, &mut cursor);
-				let vector = indices
-					.iter()
-					.map(|i| self.tokens[*i as usize].clone())
-					.collect::<Vec<_>>();
-				vt::Value::new(vector)
-			}
-			Type::IntListOp => sdf::IntListOp::read(self, &mut cursor).into(),
-			Type::UIntListOp => sdf::UIntListOp::read(self, &mut cursor).into(),
-			Type::Int64ListOp => sdf::Int64ListOp::read(self, &mut cursor).into(),
-			Type::UInt64ListOp => sdf::UInt64ListOp::read(self, &mut cursor).into(),
-
-			Type::Dictionary => vt::Dictionary::read(self, &mut cursor).into(),
 
 		let field = fields(self, spec).find(|f| self.tokens[f.token_index as usize] == *field)?;
 

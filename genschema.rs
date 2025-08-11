@@ -173,7 +173,7 @@ fn generate_class(class: &ClassDef) -> String {
 
 	code.push_str(&format!("impl {}<'_> {{\n", class.name));
 	code.push_str(&format!(
-		"\tpub fn define(stage: &usd::Stage, path: impl Into<sdf::Path>) -> {} {{\n",
+		"\tpub fn define(stage: &usd::Stage, path: impl Into<sdf::Path>) -> {}<'_> {{\n",
 		class.name
 	));
 	code.push_str(&format!(
@@ -186,7 +186,7 @@ fn generate_class(class: &ClassDef) -> String {
 		write_documentation(&mut code, &prop.documentation, "\t");
 		if prop.is_relationship {
 			code.push_str(&format!(
-				"\tpub fn {}_rel(&self) -> usd::Relationship {{\n",
+				"\tpub fn {}_rel(&self) -> usd::Relationship<'_> {{\n",
 				snakecase_from_camelcase(&prop.api_name)
 			));
 			code.push_str(&format!(
@@ -196,7 +196,7 @@ fn generate_class(class: &ClassDef) -> String {
 			code.push_str("\t}\n\n");
 		} else {
 			code.push_str(&format!(
-				"\tpub fn {}_attr(&self) -> usd::Attribute {{\n",
+				"\tpub fn {}_attr(&self) -> usd::Attribute<'_> {{\n",
 				snakecase_from_camelcase(&prop.api_name)
 			));
 			code.push_str(&format!(

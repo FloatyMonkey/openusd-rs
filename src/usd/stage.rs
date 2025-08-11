@@ -36,11 +36,11 @@ impl Stage {
 		Stage { data }
 	}
 
-	pub fn pseudo_root(&self) -> Prim {
+	pub fn pseudo_root(&self) -> Prim<'_> {
 		Prim::new(self, sdf::Path::absolute_root_path())
 	}
 
-	pub fn prim_at_path(&self, path: impl Into<sdf::Path>) -> Prim {
+	pub fn prim_at_path(&self, path: impl Into<sdf::Path>) -> Prim<'_> {
 		Prim::new(self, path.into())
 	}
 

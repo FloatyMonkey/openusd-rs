@@ -140,8 +140,10 @@ impl<'a> std::ops::Deref for Mesh<'a> {
 // --- (BEGIN CUSTOM CODE) ---
 
 pub fn triangulate(mesh: &Mesh) -> Vec<i32> {
-	let face_vertex_counts = mesh.face_vertex_counts_attr().get::<Vec<i32>>();
-	let face_vertex_indices = mesh.face_vertex_indices_attr().get::<Vec<i32>>();
+	use crate::vt;
+
+	let face_vertex_counts = mesh.face_vertex_counts_attr().get::<vt::Array<i32>>();
+	let face_vertex_indices = mesh.face_vertex_indices_attr().get::<vt::Array<i32>>();
 
 	let mut indices = vec![];
 

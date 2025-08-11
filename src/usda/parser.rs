@@ -13,8 +13,8 @@ pub struct Context {
 	data: HashMap<sdf::Path, Spec>,
 	current_path: sdf::Path,
 
-	parent_children_stack: Vec<Vec<tf::Token>>,
-	parent_properties_stack: Vec<Vec<tf::Token>>,
+	parent_children_stack: Vec<vt::Array<tf::Token>>,
+	parent_properties_stack: Vec<vt::Array<tf::Token>>,
 }
 
 impl Context {
@@ -22,8 +22,8 @@ impl Context {
 		Context {
 			data: HashMap::new(),
 			current_path: sdf::Path::absolute_root_path(),
-			parent_children_stack: vec![Vec::new()],
-			parent_properties_stack: vec![Vec::new()],
+			parent_children_stack: vec![vt::Array::new()],
+			parent_properties_stack: vec![vt::Array::new()],
 		}
 	}
 
@@ -549,8 +549,8 @@ fn prim_spec<'a>(i: &mut In<'a>) -> PResult<()> {
 		let path = parrent_path.append_child(&name);
 		i.ctx.current_path = path.clone();
 
-		i.ctx.parent_children_stack.push(Vec::new());
-		i.ctx.parent_properties_stack.push(Vec::new());
+		i.ctx.parent_children_stack.push(vt::Array::new());
+		i.ctx.parent_properties_stack.push(vt::Array::new());
 
 		delimited(
 			i,

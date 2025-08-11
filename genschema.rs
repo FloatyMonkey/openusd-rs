@@ -6,7 +6,7 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
-use openusd_rs::{sdf, tf, usd};
+use openusd_rs::{sdf, tf, usd, vt};
 
 #[derive(Debug, Clone)]
 struct ClassDef {
@@ -59,9 +59,9 @@ fn process_prim(prim: &usd::Prim, class_defs: &mut Vec<ClassDef>) {
 			let mut properties = Vec::new();
 
 			if let Some(prop_names) =
-				prim.metadata::<Vec<tf::Token>>(&sdf::CHILDREN_KEYS.property_children)
+				prim.metadata::<vt::Array<tf::Token>>(&sdf::CHILDREN_KEYS.property_children)
 			{
-				for prop_name in prop_names {
+				for prop_name in &prop_names {
 					let prop = prim.property(&prop_name);
 
 					// TODO: apiName should be of type tf::Token but parser detects it as String for now

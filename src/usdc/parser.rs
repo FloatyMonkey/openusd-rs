@@ -72,11 +72,11 @@ struct TableOfContents {
 }
 
 impl TableOfContents {
-	fn get_section(&self, name: &str) -> Option<&Section> {
+	fn section(&self, name: &str) -> Option<&Section> {
 		self.sections.iter().find(|s| s.name() == Some(name))
 	}
 
-	fn get_minimum_section_start(&self) -> u64 {
+	fn minimum_section_start(&self) -> u64 {
 		self.sections
 			.iter()
 			.min_by(|l, r| l.start.cmp(&r.start))
@@ -547,14 +547,14 @@ fn read_int_array<T: Clone + IntMapper>(
 	if !rep.is_compressed() {
 		// TODO: Should use read_uncompressed_array here.
 		// This can use a memory mapping technique to avoid copying data.
-		return read_contiguous(cursor, count);
+		return Ok(read_contiguous(cursor, count)?.into());
 	}
 
 	if count < MIN_COMPRESSED_ARRAY_SIZE {
-		return read_contiguous(cursor, count);
+		return Ok(read_contiguous(cursor, count)?.into());
 	}
 
-	read_compressed_ints(cursor, count)
+	Ok(read_compressed_ints(cursor, count)?.into())
 }
 
 fn read_float_array<T: Clone + Float>(
@@ -566,11 +566,11 @@ fn read_float_array<T: Clone + Float>(
 	if !rep.is_compressed() {
 		// TODO: Should use read_uncompressed_array here.
 		// This can use a memory mapping technique to avoid copying data.
-		return read_contiguous(cursor, count);
+		return Ok(read_contiguous(cursor, count)?.into());
 	}
 
 	if count < MIN_COMPRESSED_ARRAY_SIZE {
-		return read_contiguous(cursor, count);
+		return Ok(read_contiguous(cursor, count)?.into());
 	}
 
 	let code = cursor.read_as::<u8>()? as char;
@@ -702,14 +702,14 @@ fn read_pod<T: Sized + Default>(cursor: &mut Cursor<&[u8]>) -> Result<T> {
 	Ok(pod)
 }
 
-fn read_pod_vec<T: Sized + Clone + Default>(cursor: &mut Cursor<&[u8]>) -> Result<Vec<T>> {
+fn read_pod_vec<T: Sized + Clone + Default>(cursor: &mut Cursor<&[u8]>) -> Result<vt::Array<T>> {
 	let n = cursor.read_as::<u64>()? as usize;
 
 	let mut vec: Vec<T> = vec![Default::default(); n];
 	let byte_slice =
 		unsafe { std::slice::from_raw_parts_mut(vec.as_mut_ptr() as *mut u8, n * size_of::<T>()) };
 	cursor.read_exact(byte_slice)?;
-	Ok(vec)
+	Ok(vec.into())
 }
 
 fn read_inline(val: ValueRep) -> Option<vt::Value> {
@@ -806,7 +806,7 @@ fn unpack_value_rep(file: &UsdcFile, value: ValueRep) -> Result<Option<vt::Value
 			let vector = indices
 				.iter()
 				.map(|i| file.tokens[*i as usize].clone())
-				.collect::<Vec<_>>();
+				.collect::<vt::Array<_>>();
 			vt::Value::new(vector)
 		}
 
@@ -815,7 +815,7 @@ fn unpack_value_rep(file: &UsdcFile, value: ValueRep) -> Result<Option<vt::Value
 			let vector = indices
 				.iter()
 				.map(|i| file.tokens[*i as usize].clone())
-				.collect::<Vec<_>>();
+				.collect::<vt::Array<_>>();
 			vt::Value::new(vector)
 		}
 
@@ -1011,17 +1011,12 @@ impl UsdcFile {
 
 		let toc = read_toc(&mut cursor)?;
 
-		let tokens = read_tokens(&mut cursor, toc.get_section(Section::TOKENS).unwrap())?;
-		let strings = read_strings(&mut cursor, toc.get_section(Section::STRINGS).unwrap())?;
-		let fields = read_fields(&mut cursor, toc.get_section(Section::FIELDS).unwrap())?;
-		let field_sets =
-			read_field_sets(&mut cursor, toc.get_section(Section::FIELDSETS).unwrap())?;
-		let paths = read_paths(
-			&mut cursor,
-			toc.get_section(Section::PATHS).unwrap(),
-			&tokens,
-		)?;
-		let specs = read_specs(&mut cursor, toc.get_section(Section::SPECS).unwrap())?;
+		let tokens = read_tokens(&mut cursor, toc.section(Section::TOKENS).unwrap())?;
+		let strings = read_strings(&mut cursor, toc.section(Section::STRINGS).unwrap())?;
+		let fields = read_fields(&mut cursor, toc.section(Section::FIELDS).unwrap())?;
+		let field_sets = read_field_sets(&mut cursor, toc.section(Section::FIELDSETS).unwrap())?;
+		let paths = read_paths(&mut cursor, toc.section(Section::PATHS).unwrap(), &tokens)?;
+		let specs = read_specs(&mut cursor, toc.section(Section::SPECS).unwrap())?;
 
 		Ok(UsdcFile {
 			version,

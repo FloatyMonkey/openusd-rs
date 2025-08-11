@@ -178,7 +178,7 @@ impl XformOp {
 
 		let op_order = prim
 			.attribute(&TOKENS.xform_op_order)
-			.get::<Vec<tf::Token>>();
+			.get::<vt::Array<tf::Token>>();
 
 		for op in op_order.iter().rev() {
 			let op_type =

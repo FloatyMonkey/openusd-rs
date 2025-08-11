@@ -1,8 +1,8 @@
+use super::Array;
 use crate::{gf, sdf, tf, vt};
 use half::f16;
 use std::collections::HashMap;
 
-pub type Array<T> = Vec<T>;
 pub type Dictionary = HashMap<String, vt::Value>;
 
 #[derive(Debug, Clone)]

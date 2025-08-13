@@ -44,7 +44,7 @@ fn process_prim(prim: &usd::Prim, class_defs: &mut Vec<ClassDef>) {
 				prim.metadata::<sdf::PathListOp>(&sdf::FIELD_KEYS.inherit_paths)
 			{
 				for inherit_path in &inherit_paths.explicit_items {
-					inherits.push(inherit_path.name().to_string());
+					inherits.push(inherit_path.name_token().to_string());
 				}
 			}
 
@@ -83,7 +83,7 @@ fn process_prim(prim: &usd::Prim, class_defs: &mut Vec<ClassDef>) {
 			}
 
 			class_defs.push(ClassDef {
-				name: prim.path().name(),
+				name: prim.path().name_token().to_string(),
 				documentation: prim.documentation(),
 				inherit: inherits[0].clone(),
 				properties,

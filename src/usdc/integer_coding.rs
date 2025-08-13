@@ -145,12 +145,13 @@ pub fn read_compressed_ints<T: Integer>(
 pub fn write_compressed_ints<T: Integer>(
 	cursor: &mut Cursor<Vec<u8>>,
 	values: &[T],
-) -> std::io::Result<usize> {
+) -> std::io::Result<()> {
 	let encoded_data = encode_integers(values);
 	let compressed_data = compression::compress_to_buffer(&encoded_data);
 
+	cursor.write_as::<u64>(compressed_data.len() as u64)?;
 	cursor.write_all(&compressed_data)?;
-	Ok(compressed_data.len())
+	Ok(())
 }
 
 // TODO: Support i64, u64 and perform intermediate computations as correct type

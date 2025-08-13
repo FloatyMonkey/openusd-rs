@@ -46,14 +46,20 @@ pub struct PathNode {
 }
 
 impl PathNode {
-	pub const IS_ABSOLUTE_FLAG: u8 = 1 << 0;
+	const IS_ABSOLUTE_FLAG: u8 = 1 << 0;
+	const CONTAINS_PRIM_VAR_SEL_FLAG: u8 = 1 << 1;
+	const CONTAINS_TARGET_PATH_FLAG: u8 = 1 << 2;
 
 	pub fn is_absolute_path(&self) -> bool {
 		self.flags & Self::IS_ABSOLUTE_FLAG != 0
 	}
 
-	pub fn is_absolute_root(&self) -> bool {
-		self.flags & Self::IS_ABSOLUTE_FLAG != 0 && self.element_count == 0
+	pub fn contains_prim_variant_selection(&self) -> bool {
+		self.flags & Self::CONTAINS_PRIM_VAR_SEL_FLAG != 0
+	}
+
+	pub fn contains_target_path(&self) -> bool {
+		self.flags & Self::CONTAINS_TARGET_PATH_FLAG != 0
 	}
 
 	pub fn element_count(&self) -> u16 {
@@ -86,6 +92,18 @@ impl PathNode {
 			PathNodeData::Expression => &PATH_TOKENS.expression_indicator,
 			_ => &PATH_TOKENS.empty,
 		}
+	}
+
+	pub fn element(&self) -> tf::Token {
+		let mut out = String::new();
+		Self::write_node_string(self, &mut out);
+		tf::Token::new(out)
+	}
+
+	pub fn path_string(prim_part: PoolHandle, prop_part: PoolHandle) -> String {
+		let mut out = String::new();
+		Self::write_path_string(prim_part, prop_part, &mut out);
+		out
 	}
 
 	fn write_node_string(node: &PathNode, out: &mut String) {
@@ -183,10 +201,14 @@ impl PathNode {
 		}
 	}
 
-	pub fn path_string(prim_part: PoolHandle, prop_part: PoolHandle) -> String {
-		let mut out = String::new();
-		Self::write_path_string(prim_part, prop_part, &mut out);
-		out
+	fn flags_from_node_type(data: &PathNodeData) -> u8 {
+		use PathNodeData::*;
+
+		match data {
+			PrimVariantSelection { .. } => Self::CONTAINS_PRIM_VAR_SEL_FLAG,
+			Target { .. } | Mapper { .. } => Self::CONTAINS_TARGET_PATH_FLAG,
+			_ => 0,
+		}
 	}
 }
 
@@ -229,16 +251,8 @@ impl<T> Pool<T> {
 		}
 	}
 
-	fn remove(&mut self, handle: PoolHandle) {
-		self.free_list.push(handle as usize);
-	}
-
 	pub fn get(&self, handle: PoolHandle) -> Option<&T> {
 		self.elements.get(handle as usize)
-	}
-
-	fn get_mut(&mut self, handle: PoolHandle) -> Option<&mut T> {
-		self.elements.get_mut(handle as usize)
 	}
 }
 
@@ -288,7 +302,7 @@ pub fn find_or_create_path_node(
 		parent: parent.unwrap_or(INVALID_NODE_HANDLE),
 		ref_count: std::sync::atomic::AtomicU32::new(1),
 		element_count: parent_node.map_or(0, |p| p.element_count + 1),
-		flags: parent_node.map_or(0, |p| p.flags),
+		flags: parent_node.map_or(0, |p| p.flags) | PathNode::flags_from_node_type(data),
 		data: data.clone(),
 	};
 

@@ -2,11 +2,11 @@ use super::{compression, integer_coding::*};
 use crate::io_ext::{ReadBytesExt, WriteBytesExt};
 use crate::{gf, sdf, tf, vt};
 
+use std::collections::HashMap;
 use std::{
 	cell::RefCell,
 	collections::HashSet,
-	io::{Cursor, Read, Seek},
-	path::Path,
+	io::{Cursor, Read, Seek, Write},
 };
 
 use half::f16;
@@ -54,18 +54,27 @@ struct Section {
 }
 
 impl Section {
-	const TOKENS: &'static str = "TOKENS";
-	const STRINGS: &'static str = "STRINGS";
-	const FIELDS: &'static str = "FIELDS";
-	const FIELDSETS: &'static str = "FIELDSETS";
-	const PATHS: &'static str = "PATHS";
-	const SPECS: &'static str = "SPECS";
+	const TOKENS: &str = "TOKENS";
+	const STRINGS: &str = "STRINGS";
+	const FIELDS: &str = "FIELDS";
+	const FIELDSETS: &str = "FIELDSETS";
+	const PATHS: &str = "PATHS";
+	const SPECS: &str = "SPECS";
 
 	fn name(&self) -> Option<&str> {
 		let len = self.name.iter().position(|&x| x == 0)?;
 		std::str::from_utf8(&self.name[0..len]).ok()
 	}
 }
+
+const KNOWN_SECTIONS: &[&str] = &[
+	Section::TOKENS,
+	Section::STRINGS,
+	Section::FIELDS,
+	Section::FIELDSETS,
+	Section::PATHS,
+	Section::SPECS,
+];
 
 struct TableOfContents {
 	sections: Vec<Section>,
@@ -85,16 +94,16 @@ impl TableOfContents {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 struct Field {
-	token_index: Index,
+	token_index: TokenIndex,
 	value_rep: ValueRep,
 }
 
 #[repr(C)]
 struct Spec {
-	path_index: Index,
-	field_set_index: Index,
+	path_index: PathIndex,
+	field_set_index: FieldSetIndex,
 	spec_type: sdf::SpecType,
 }
 
@@ -168,7 +177,7 @@ enum Type {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 struct ValueRep(u64);
 
 impl ValueRep {
@@ -317,6 +326,24 @@ fn read_toc(cursor: &mut Cursor<&[u8]>) -> Result<TableOfContents> {
 	Ok(TableOfContents { sections })
 }
 
+fn write_tokens(c: &mut Cursor<Vec<u8>>, tokens: &[tf::Token]) -> Result<()> {
+	let mut uncompressed = Vec::new();
+
+	for token in tokens {
+		uncompressed.extend_from_slice(token.as_str().as_bytes());
+		uncompressed.push(b'\0');
+	}
+
+	let compressed = compression::compress_to_buffer(&uncompressed);
+
+	c.write_as::<u64>(tokens.len() as u64)?;
+	c.write_as::<u64>(uncompressed.len() as u64)?;
+	c.write_as::<u64>(compressed.len() as u64)?;
+	c.write_all(&compressed)?;
+
+	Ok(())
+}
+
 fn read_tokens(cursor: &mut Cursor<&[u8]>, section: &Section) -> Result<Vec<tf::Token>> {
 	cursor.set_position(section.start);
 
@@ -324,26 +351,23 @@ fn read_tokens(cursor: &mut Cursor<&[u8]>, section: &Section) -> Result<Vec<tf::
 	let uncompressed_size = cursor.read_as::<u64>()?;
 	let compressed_size = cursor.read_as::<u64>()?;
 
-	assert_eq!(compressed_size + 24, section.size);
-
 	let mut compressed_buffer = vec![0; compressed_size as usize];
 	cursor.read_exact(&mut compressed_buffer)?;
 
-	let mut buffer =
+	let buffer =
 		compression::decompress_from_buffer(&compressed_buffer, uncompressed_size as usize);
 
 	if buffer.last() != Some(&b'\0') {
 		panic!("Tokens section not null-terminated in crate file");
 	}
 
-	buffer.pop(); // Prevent empty string at the end.
-
-	let tokens = buffer
+	let tokens = buffer[..buffer.len() - 1]
 		.split(|c| *c == b'\0')
 		.map(|b| std::str::from_utf8(b).unwrap())
 		.map(|s| tf::Token::new(s))
 		.collect::<Vec<_>>();
 
+	// TODO: Add a range check to all sections
 	if tokens.len() != token_count as usize {
 		panic!(
 			"Crate file claims {} tokens, found {}",
@@ -355,17 +379,47 @@ fn read_tokens(cursor: &mut Cursor<&[u8]>, section: &Section) -> Result<Vec<tf::
 	Ok(tokens)
 }
 
-fn read_strings(cursor: &mut Cursor<&[u8]>, section: &Section) -> Result<Vec<Index>> {
+fn write_strings(cursor: &mut Cursor<Vec<u8>>, strings: &[TokenIndex]) -> Result<()> {
+	cursor.write_as::<u64>(strings.len() as u64)?;
+
+	for string in strings {
+		cursor.write_as::<Index>(string.0)?;
+	}
+
+	Ok(())
+}
+
+fn read_strings(cursor: &mut Cursor<&[u8]>, section: &Section) -> Result<Vec<TokenIndex>> {
 	cursor.set_position(section.start);
 
-	let indices_count = cursor.read_as::<u64>()?;
-	let mut indices = Vec::with_capacity(indices_count as usize);
+	let string_count = cursor.read_as::<u64>()? as usize;
+	let mut indices = Vec::with_capacity(string_count as usize);
 
-	for _ in 0..indices_count {
-		indices.push(cursor.read_as::<Index>()?);
+	// TODO: Replace this with a single read_exact call
+	for _ in 0..string_count {
+		indices.push(TokenIndex(cursor.read_as::<Index>()?));
 	}
 
 	Ok(indices)
+}
+
+fn write_fields(cursor: &mut Cursor<Vec<u8>>, fields: &[Field]) -> Result<()> {
+	cursor.write_as::<u64>(fields.len() as u64)?;
+
+	// Token indices.
+	let token_indices = fields.iter().map(|f| f.token_index.0).collect::<Vec<_>>();
+	write_compressed_ints::<u32>(cursor, &token_indices)?;
+
+	// ValueReps.
+	let value_reps = fields
+		.iter()
+		.flat_map(|f| f.value_rep.0.to_ne_bytes())
+		.collect::<Vec<_>>();
+	let compressed_value_reps = compression::compress_to_buffer(&value_reps);
+	cursor.write_as::<u64>(compressed_value_reps.len() as u64)?;
+	cursor.write_all(&compressed_value_reps)?;
+
+	Ok(())
 }
 
 fn read_fields(cursor: &mut Cursor<&[u8]>, section: &Section) -> Result<Vec<Field>> {
@@ -373,33 +427,91 @@ fn read_fields(cursor: &mut Cursor<&[u8]>, section: &Section) -> Result<Vec<Fiel
 
 	let field_count = cursor.read_as::<u64>()? as usize;
 
-	let indices = read_compressed_ints::<u32>(cursor, field_count)?;
+	let token_indices = read_compressed_ints::<u32>(cursor, field_count)?;
 
-	let flag_size = cursor.read_as::<u64>()?;
-	let mut compressed_buffer = vec![0; flag_size as usize];
+	let compressed_size = cursor.read_as::<u64>()?;
+	let mut compressed_buffer = vec![0; compressed_size as usize];
 	cursor.read_exact(&mut compressed_buffer)?;
 
-	let uncompressed_buffer =
-		compression::decompress_from_buffer(&compressed_buffer, field_count * 8);
-	let mut uncompressed_cursor = Cursor::new(uncompressed_buffer.as_slice());
+	let buffer = compression::decompress_from_buffer(
+		&compressed_buffer,
+		field_count * size_of::<ValueRep>(),
+	);
+	let mut value_cursor = Cursor::new(buffer.as_slice());
 
-	let fields = indices
+	let fields = token_indices
 		.iter()
-		.map(|&name| Field {
-			token_index: name as Index,
-			value_rep: ValueRep(uncompressed_cursor.read_as::<u64>().unwrap()),
+		.map(|&index| Field {
+			token_index: TokenIndex(index),
+			value_rep: ValueRep(value_cursor.read_as::<u64>().unwrap()),
 		})
 		.collect();
 
 	Ok(fields)
 }
 
-fn read_field_sets(cursor: &mut Cursor<&[u8]>, section: &Section) -> Result<Vec<Index>> {
+fn write_field_sets(cursor: &mut Cursor<Vec<u8>>, field_sets: &[FieldIndex]) -> Result<()> {
+	cursor.write_as::<u64>(field_sets.len() as u64)?;
+	let temp = field_sets.iter().map(|fs| fs.0).collect::<Vec<_>>();
+	write_compressed_ints::<u32>(cursor, &temp)
+}
+
+fn read_field_sets(cursor: &mut Cursor<&[u8]>, section: &Section) -> Result<Vec<FieldIndex>> {
 	cursor.set_position(section.start);
 
 	let field_set_count = cursor.read_as::<u64>()? as usize;
+	let temp = read_compressed_ints::<Index>(cursor, field_set_count)?;
+	// TODO: Prevent this extra allocation, read compressed directly as FieldIndex
+	Ok(temp.into_iter().map(|i| FieldIndex(i)).collect())
+}
 
-	read_compressed_ints::<Index>(cursor, field_set_count)
+fn write_paths(c: &mut Cursor<Vec<u8>>, paths: &[sdf::Path], file: &UsdcFile) -> Result<()> {
+	let mut ppaths: Vec<(sdf::Path, u32)> = Vec::with_capacity(paths.len());
+	for path in paths {
+		if !path.is_empty() {
+			let index = file
+				.pack_ctx
+				.path_index_from_path
+				.get(path)
+				.map_or(0, |f| f.0);
+
+			ppaths.push((path.clone(), index));
+		}
+	}
+
+	ppaths.sort_by_key(|(path, _)| path.clone()); // TODO: get rid of this clone
+
+	let mut path_indices = vec![0; ppaths.len()];
+	let mut element_token_indices = vec![0; ppaths.len()];
+	let mut jumps = vec![0; ppaths.len()];
+
+	let mut iter = ppaths.iter().map(|(p, i)| (p.clone(), *i));
+
+	compress_paths_recursive(
+		&mut 0,
+		&mut iter,
+		&mut path_indices,
+		&mut element_token_indices,
+		&mut jumps,
+		&|token| {
+			file.pack_ctx
+				.token_index_from_token
+				.get(&token)
+				.map_or(0, |f| f.0)
+		},
+	);
+
+	// Write the total number of paths.
+	c.write_as::<u64>(paths.len() as u64)?;
+	// Write the number of encoded paths.
+	// This can differ from the total since we do not write out empty paths.
+	c.write_as::<u64>(ppaths.len() as u64)?;
+
+	write_compressed_ints::<u32>(c, &path_indices)?;
+	write_compressed_ints::<i32>(c, &element_token_indices)?;
+	write_compressed_ints::<i32>(c, &jumps)?;
+
+	Ok(())
 }
 
 fn read_paths(
@@ -409,16 +521,16 @@ fn read_paths(
 ) -> Result<Vec<sdf::Path>> {
 	cursor.set_position(section.start);
 
-	let path_count = cursor.read_as::<u64>()? as usize;
-	let _ = cursor.read_as::<u64>()?; // Must be equal to path_count
+	let total_path_count = cursor.read_as::<u64>()? as usize;
+	let encoded_path_count = cursor.read_as::<u64>()? as usize;
 
-	let path_indices = read_compressed_ints::<u32>(cursor, path_count)?;
-	let element_token_indices = read_compressed_ints::<i32>(cursor, path_count)?;
-	let jumps = read_compressed_ints::<i32>(cursor, path_count)?;
+	let path_indices = read_compressed_ints::<u32>(cursor, encoded_path_count)?;
+	let element_token_indices = read_compressed_ints::<i32>(cursor, encoded_path_count)?;
+	let jumps = read_compressed_ints::<i32>(cursor, encoded_path_count)?;
 
-	let mut paths = vec![sdf::Path::empty_path(); path_count];
+	let mut paths = vec![sdf::Path::empty_path(); total_path_count];
 
-	build_decompressed_paths_recursive(
+	decompress_paths_recursive(
 		&path_indices,
 		&element_token_indices,
 		&jumps,
@@ -429,6 +541,28 @@ fn read_paths(
 	);
 
 	Ok(paths)
+}
+
+fn write_specs(c: &mut Cursor<Vec<u8>>, specs: &[Spec]) -> Result<()> {
+	let mut temp = Vec::with_capacity(specs.len());
+
+	c.write_as::<u64>(specs.len() as u64)?;
+
+	// Path indices.
+	temp.extend(specs.iter().map(|s| s.path_index.0));
+	write_compressed_ints::<u32>(c, &temp)?;
+
+	// Field set indices.
+	temp.clear();
+	temp.extend(specs.iter().map(|s| s.field_set_index.0));
+	write_compressed_ints::<u32>(c, &temp)?;
+
+	// Spec types.
+	temp.clear();
+	temp.extend(specs.iter().map(|s| s.spec_type as u32));
+	write_compressed_ints::<u32>(c, &temp)?;
+
+	Ok(())
 }
 
 fn read_specs(cursor: &mut Cursor<&[u8]>, section: &Section) -> Result<Vec<Spec>> {
@@ -444,8 +578,8 @@ fn read_specs(cursor: &mut Cursor<&[u8]>, section: &Section) -> Result<Vec<Spec>
 
 	for i in 0..spec_count {
 		spec.push(Spec {
-			path_index: path_indices[i],
-			field_set_index: field_set_indices[i],
+			path_index: PathIndex(path_indices[i]),
+			field_set_index: FieldSetIndex(field_set_indices[i]),
 			spec_type: unsafe { std::mem::transmute::<u32, sdf::SpecType>(spec_types[i]) },
 		});
 	}
@@ -513,11 +647,103 @@ fn read_float_array<T: Clone + Float>(
 	})
 }
 
-fn build_decompressed_paths_recursive(
+fn compress_paths_recursive<I>(
+	cur_index: &mut usize,
+	paths_with_indices: &mut I,
+	path_indices: &mut Vec<u32>,
+	element_token_indices: &mut Vec<i32>,
+	jumps: &mut Vec<i32>,
+	index_from_token: &dyn Fn(&tf::Token) -> Index,
+) -> Option<(sdf::Path, Index)>
+where
+	I: Iterator<Item = (sdf::Path, Index)> + Clone,
+{
+	let mut next_item = paths_with_indices.next();
+
+	while let Some((ref current_path, current_index)) = next_item {
+		let current_clone = current_path.clone();
+		let mut lookahead = paths_with_indices.clone();
+		let mut next_subtree_item = None;
+
+		while let Some((path, idx)) = lookahead.next() {
+			if !path.has_prefix(&current_clone) {
+				next_subtree_item = Some((path, idx));
+				break;
+			}
+		}
+
+		let mut iter_clone = paths_with_indices.clone();
+		let next_sequential = iter_clone.next();
+
+		let has_child = if let Some((next_path, _)) = &next_sequential {
+			if let Some((subtree_path, _)) = &next_subtree_item {
+				next_path != subtree_path && next_path.parent_path() == *current_path
+			} else {
+				next_path.parent_path() == *current_path
+			}
+		} else {
+			false
+		};
+
+		let has_sibling = next_subtree_item.is_some_and(|(subtree_path, _)| {
+			subtree_path.parent_path() == current_path.parent_path()
+		});
+
+		let is_prim_property_path = current_path.is_prim_property_path();
+
+		let element_token = if is_prim_property_path {
+			current_path.name_token()
+		} else {
+			current_path.element_token()
+		};
+
+		let this_index = *cur_index;
+		*cur_index += 1;
+
+		path_indices[this_index] = current_index;
+		element_token_indices[this_index] = if is_prim_property_path {
+			-(index_from_token(&element_token) as i32)
+		} else {
+			index_from_token(&element_token) as i32
+		};
+
+		// If there is a child, recurse.
+		if has_child {
+			next_item = compress_paths_recursive(
+				cur_index,
+				paths_with_indices,
+				path_indices,
+				element_token_indices,
+				jumps,
+				index_from_token,
+			);
+		}
+
+		// If we have a sibling, then fill in the offset that it will be
+		// written at (it will be written next).
+		if has_sibling && has_child {
+			jumps[this_index] = (*cur_index - this_index) as i32;
+		} else if has_sibling {
+			jumps[this_index] = 0;
+		} else if has_child {
+			jumps[this_index] = -1;
+		} else {
+			jumps[this_index] = -2;
+		}
+
+		if !has_sibling {
+			return next_item;
+		}
+	}
+
+	None
+}
+
+fn decompress_paths_recursive(
 	path_indices: &[u32],
 	element_token_indices: &[i32],
 	jumps: &[i32],
-	mut cur_index: usize,
+	mut cur_index: usize, // TODO: Should these be references?
 	mut parent_path: sdf::Path,
 	tokens: &[tf::Token],
 	paths: &mut [sdf::Path],
@@ -555,7 +781,7 @@ fn build_decompressed_paths_recursive(
 			if has_sibling {
 				// Branch off a function for the sibling subtree.
 				let sibling_index = this_index + jumps[this_index] as usize;
-				build_decompressed_paths_recursive(
+				decompress_paths_recursive(
 					path_indices,
 					element_token_indices,
 					jumps,
@@ -630,26 +856,39 @@ fn read_pod_vec<T: Sized + Clone + Default>(cursor: &mut Cursor<&[u8]>) -> Resul
 	Ok(vec.into())
 }
 
-fn read_inline(val: ValueRep) -> Option<vt::Value> {
+fn read_inline(file: &UsdcFile, val: ValueRep) -> Option<vt::Value> {
+	if val.is_array() || val.is_compressed() || !val.is_inlined() {
+		return None;
+	}
+
 	Some(match val.ty() {
-		Type::Vec2i if val.is_inlined() => read_inline_vec2::<i32>(val).into(),
-		Type::Vec2h if val.is_inlined() => read_inline_vec2::<f16>(val).into(),
-		Type::Vec2f if val.is_inlined() => read_inline_vec2::<f32>(val).into(),
-		Type::Vec2d if val.is_inlined() => read_inline_vec2::<f64>(val).into(),
+		Type::Token => {
+			let token_index = TokenIndex(val.payload() as Index);
+			file.get_token(token_index).clone().into()
+		}
 
-		Type::Vec3i if val.is_inlined() => read_inline_vec3::<i32>(val).into(),
-		Type::Vec3h if val.is_inlined() => read_inline_vec3::<f16>(val).into(),
-		Type::Vec3f if val.is_inlined() => read_inline_vec3::<f32>(val).into(),
-		Type::Vec3d if val.is_inlined() => read_inline_vec3::<f64>(val).into(),
+		Type::Half => f16::from_bits(val.payload() as u16).into(),
+		Type::Float => f32::from_bits(val.payload() as u32).into(),
+		Type::Double => f64::from_bits(val.payload() as u64).into(),
 
-		Type::Vec4i if val.is_inlined() => read_inline_vec4::<i32>(val).into(),
-		Type::Vec4h if val.is_inlined() => read_inline_vec4::<f16>(val).into(),
-		Type::Vec4f if val.is_inlined() => read_inline_vec4::<f32>(val).into(),
-		Type::Vec4d if val.is_inlined() => read_inline_vec4::<f64>(val).into(),
+		Type::Vec2i => read_inline_vec2::<i32>(val).into(),
+		Type::Vec2h => read_inline_vec2::<f16>(val).into(),
+		Type::Vec2f => read_inline_vec2::<f32>(val).into(),
+		Type::Vec2d => read_inline_vec2::<f64>(val).into(),
 
-		Type::Matrix2d if val.is_inlined() => read_inline_mat2(val).into(),
-		Type::Matrix3d if val.is_inlined() => read_inline_mat3(val).into(),
-		Type::Matrix4d if val.is_inlined() => read_inline_mat4(val).into(),
+		Type::Vec3i => read_inline_vec3::<i32>(val).into(),
+		Type::Vec3h => read_inline_vec3::<f16>(val).into(),
+		Type::Vec3f => read_inline_vec3::<f32>(val).into(),
+		Type::Vec3d => read_inline_vec3::<f64>(val).into(),
+
+		Type::Vec4i => read_inline_vec4::<i32>(val).into(),
+		Type::Vec4h => read_inline_vec4::<f16>(val).into(),
+		Type::Vec4f => read_inline_vec4::<f32>(val).into(),
+		Type::Vec4d => read_inline_vec4::<f64>(val).into(),
+
+		Type::Matrix2d => read_inline_mat2(val).into(),
+		Type::Matrix3d => read_inline_mat3(val).into(),
+		Type::Matrix4d => read_inline_mat4(val).into(),
 
 		_ => return None,
 	})
@@ -658,14 +897,7 @@ fn read_inline(val: ValueRep) -> Option<vt::Value> {
 fn unpack_value_rep(file: &UsdcFile, value: ValueRep) -> Result<Option<vt::Value>> {
 	let buffer = &file.buffer;
 
-	if value.ty() == Type::Token && !value.is_array() && value.is_inlined() {
-		let token_index = value.payload();
-		let token = file.tokens[token_index as usize].clone();
-
-		return Ok(Some(vt::Value::new(token)));
-	}
-
-	if let Some(v) = read_inline(value) {
+	if let Some(v) = read_inline(file, value) {
 		return Ok(Some(v));
 	}
 
@@ -677,13 +909,9 @@ fn unpack_value_rep(file: &UsdcFile, value: ValueRep) -> Result<Option<vt::Value
 		Type::Float if value.is_array() => read_float_array::<f32>(&mut cursor, value)?.into(),
 		Type::Double if value.is_array() => read_float_array::<f64>(&mut cursor, value)?.into(),
 
-		Type::Float if value.is_inlined() => {
-			let val = value.payload() as u32;
-			f32::from_bits(val).into()
-		}
-
+		// TODO: This is always be an inlined value
 		Type::AssetPath => {
-			let token = file.tokens[value.payload() as usize].clone();
+			let token = file.get_token(TokenIndex(value.payload() as Index));
 			vt::Value::new(sdf::AssetPath {
 				authored_path: token.as_str().into(),
 				evaluated_path: String::new(),
@@ -732,7 +960,7 @@ fn unpack_value_rep(file: &UsdcFile, value: ValueRep) -> Result<Option<vt::Value
 			let indices = Vec::<Index>::read(file, &mut cursor)?;
 			let vector = indices
 				.iter()
-				.map(|i| file.tokens[*i as usize].clone())
+				.map(|i| file.get_token(TokenIndex(*i)).clone())
 				.collect::<vt::Array<_>>();
 			vt::Value::new(vector)
 		}
@@ -741,7 +969,7 @@ fn unpack_value_rep(file: &UsdcFile, value: ValueRep) -> Result<Option<vt::Value
 			let indices = Vec::<Index>::read(file, &mut cursor)?;
 			let vector = indices
 				.iter()
-				.map(|i| file.tokens[*i as usize].clone())
+				.map(|i| file.get_token(TokenIndex(*i)).clone())
 				.collect::<vt::Array<_>>();
 			vt::Value::new(vector)
 		}
@@ -765,51 +993,44 @@ fn unpack_value_rep(file: &UsdcFile, value: ValueRep) -> Result<Option<vt::Value
 
 impl sdf::AbstractData for UsdcFile {
 	fn get(&self, path: &sdf::Path, field: &tf::Token) -> Option<vt::Value> {
-		let path_index = self.paths.iter().position(|p| *p == *path)?;
+		let path_index = PathIndex(self.paths.iter().position(|p| *p == *path)? as u32);
 
-		let spec = self
-			.specs
-			.iter()
-			.find(|s| s.path_index == path_index as Index)?;
+		let spec = self.specs.iter().find(|s| s.path_index == path_index)?;
 
-		let field = fields(self, spec).find(|f| self.tokens[f.token_index as usize] == *field)?;
+		let field = fields(self, spec).find(|f| self.get_token(f.token_index) == field)?;
 
 		unpack_value_rep(self, field.value_rep).unwrap()
 	}
 
 	fn spec_type(&self, path: &sdf::Path) -> Option<sdf::SpecType> {
-		let path_index = self.paths.iter().position(|p| *p == *path)?;
+		let path_index = PathIndex(self.paths.iter().position(|p| *p == *path)? as u32);
 
 		self.specs
 			.iter()
-			.find(|s| s.path_index == path_index as Index)
+			.find(|s| s.path_index == path_index)
 			.map(|spec| spec.spec_type)
 	}
 
 	fn list(&self, path: &sdf::Path) -> Vec<&tf::Token> {
 		let path_index = match self.paths.iter().position(|p| *p == *path) {
-			Some(index) => index,
+			Some(index) => PathIndex(index as u32),
 			None => return Vec::new(),
 		};
 
-		let spec = match self
-			.specs
-			.iter()
-			.find(|s| s.path_index == path_index as Index)
-		{
+		let spec = match self.specs.iter().find(|s| s.path_index == path_index) {
 			Some(spec) => spec,
 			None => return Vec::new(),
 		};
 
 		fields(self, spec)
-			.map(|field| &self.tokens[field.token_index as usize])
+			.map(|field| self.get_token(field.token_index))
 			.collect()
 	}
 
 	fn visit_specs(&self) -> Vec<&sdf::Path> {
 		self.specs
 			.iter()
-			.map(|spec| &self.paths[spec.path_index as usize])
+			.map(|spec| self.get_path(spec.path_index))
 			.collect()
 	}
 }
@@ -820,11 +1041,28 @@ pub struct UsdcFile {
 
 	specs: Vec<Spec>,
 	fields: Vec<Field>,
-	field_sets: Vec<Index>,
+	field_sets: Vec<FieldIndex>,
 
 	paths: Vec<sdf::Path>,
 	tokens: Vec<tf::Token>,
-	strings: Vec<Index>,
+	strings: Vec<TokenIndex>,
+
+	pack_ctx: PackCtx,
+}
+
+#[derive(Default)]
+struct PackCtx {
+	// Deduplication tables.
+	token_index_from_token: HashMap<tf::Token, TokenIndex>,
+	string_index_from_string: HashMap<String, StringIndex>,
+	path_index_from_path: HashMap<sdf::Path, PathIndex>,
+	field_index_from_field: HashMap<Field, FieldIndex>,
+
+	// Mapping from a group of fields to their starting index in field_sets.
+	field_set_index_from_field_index: HashMap<Vec<FieldIndex>, FieldSetIndex>,
+
+	// Unknown sections we're moving to the new structural area.
+	unknown_sections: Vec<(String, Vec<u8>)>,
 }
 
 trait CrateIo {
@@ -953,7 +1191,7 @@ impl<T: CrateIo + Default> CrateIo for sdf::ListOp<T> {
 }
 
 impl UsdcFile {
-	pub fn open(asset_path: &Path) -> Result<Self> {
+	pub fn open(asset_path: &std::path::Path) -> Result<Self> {
 		let buffer = std::fs::read(asset_path)?;
 		let mut cursor = Cursor::new(buffer.as_slice());
 
@@ -989,21 +1227,162 @@ impl UsdcFile {
 			field_sets,
 			paths,
 			specs,
+
+			pack_ctx: PackCtx::default(),
 		})
 	}
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TokenIndex(Index);
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct StringIndex(Index);
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct PathIndex(Index);
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct FieldIndex(Index);
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+pub struct FieldSetIndex(Index);
+
+pub type FieldValuePair = (tf::Token, vt::Value);
+
 impl UsdcFile {
-	fn get_string(&self, index: Index) -> &str {
-		self.tokens[self.strings[index as usize] as usize].as_str()
+	fn get_string(&self, index: StringIndex) -> &str {
+		self.get_token(self.strings[index.0 as usize]).as_str()
 	}
 
-	fn get_token(&self, index: Index) -> &tf::Token {
-		&self.tokens[index as usize]
+	fn get_token(&self, index: TokenIndex) -> &tf::Token {
+		&self.tokens[index.0 as usize]
 	}
 
-	fn get_path(&self, index: Index) -> &sdf::Path {
-		&self.paths[index as usize]
+	fn get_path(&self, index: PathIndex) -> &sdf::Path {
+		&self.paths[index.0 as usize]
+	}
+
+	fn get_field(&self, index: FieldIndex) -> &Field {
+		&self.fields[index.0 as usize]
+	}
+
+	fn add_spec(
+		&mut self,
+		path: &sdf::Path,
+		spec_type: sdf::SpecType,
+		fields: Vec<FieldValuePair>,
+	) {
+		// TODO: Support TimeSamples
+		// TODO: Support ts::Spline
+
+		let ordinary_fields: Vec<FieldIndex> = fields.iter().map(|fv| self.add_field(fv)).collect();
+
+		let path_index = self.add_path(path);
+		let field_set_index = self.add_field_set(&ordinary_fields);
+
+		self.specs.push(Spec {
+			path_index,
+			spec_type,
+			field_set_index,
+		});
+	}
+
+	fn add_field(&mut self, fv: &FieldValuePair) -> FieldIndex {
+		let field = Field {
+			token_index: self.add_token(&fv.0),
+			value_rep: self.pack_value(&fv.1),
+		};
+
+		*self
+			.pack_ctx
+			.field_index_from_field
+			.entry(field.clone())
+			.or_insert_with(|| {
+				let index = FieldIndex(self.fields.len() as u32);
+				self.fields.push(field);
+				index
+			})
+	}
+
+	fn add_field_set(&mut self, field_indices: &Vec<FieldIndex>) -> FieldSetIndex {
+		*self
+			.pack_ctx
+			.field_set_index_from_field_index
+			.entry(field_indices.clone())
+			.or_insert_with(|| {
+				let index = FieldSetIndex(self.field_sets.len() as u32);
+				self.field_sets.extend_from_slice(&field_indices);
+				self.field_sets.push(FieldIndex(0)); // Separator
+				index
+			})
+	}
+
+	fn add_token(&mut self, token: &tf::Token) -> TokenIndex {
+		*self
+			.pack_ctx
+			.token_index_from_token
+			.entry(token.clone())
+			.or_insert_with(|| {
+				let index = TokenIndex(self.tokens.len() as u32);
+				self.tokens.push(token.clone());
+				index
+			})
+	}
+
+	fn add_string(&mut self, string: &str) -> StringIndex {
+		if let Some(index) = self.pack_ctx.string_index_from_string.get(string) {
+			return *index;
+		}
+
+		let token = self.add_token(&tf::Token::new(string));
+
+		let index = StringIndex(self.strings.len() as u32);
+
+		self.pack_ctx
+			.string_index_from_string
+			.insert(string.to_string(), index);
+
+		self.strings.push(token);
+
+		index
+	}
+
+	fn add_path(&mut self, path: &sdf::Path) -> PathIndex {
+		if let Some(index) = self.pack_ctx.path_index_from_path.get(path) {
+			return *index;
+		}
+
+		if path.is_target_path() {
+			// TODO: self.add_path(path.target_path());
+			todo!("Target paths are not supported yet");
+		}
+
+		if !path.is_absolute_root() {
+			self.add_path(&path.parent_path());
+		}
+
+		// We treat prim property paths separately since there are so many,
+		// the name with the dot would double the number of tokens we store.
+		self.add_token(&if path.is_prim_property_path() {
+			path.name_token()
+		} else {
+			path.element_token()
+		});
+
+		let index = PathIndex(self.tokens.len() as u32);
+
+		self.pack_ctx
+			.path_index_from_path
+			.insert(path.clone(), index);
+
+		self.paths.push(path.clone());
+
+		index
+	}
+
+	fn pack_value(&mut self, value: &vt::Value) -> ValueRep {
+		todo!()
 	}
 
 	fn read<T: CrateIo>(&self, cursor: &mut Cursor<&[u8]>) -> Result<T> {
@@ -1013,19 +1392,22 @@ impl UsdcFile {
 
 impl CrateIo for String {
 	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
-		Ok(file.get_string(cursor.read_as::<Index>()?).to_string())
+		let index = StringIndex(cursor.read_as::<Index>()?);
+		Ok(file.get_string(index).to_string())
 	}
 }
 
 impl CrateIo for tf::Token {
 	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
-		Ok(file.get_token(cursor.read_as::<Index>()?).clone())
+		let index = TokenIndex(cursor.read_as::<Index>()?);
+		Ok(file.get_token(index).clone())
 	}
 }
 
 impl CrateIo for sdf::Path {
 	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
-		Ok(file.get_path(cursor.read_as::<Index>()?).clone())
+		let index = PathIndex(cursor.read_as::<Index>()?);
+		Ok(file.get_path(index).clone())
 	}
 }
 
@@ -1102,9 +1484,9 @@ impl CrateIo for sdf::Payload {
 fn fields<'a>(usdc: &'a UsdcFile, spec: &Spec) -> impl Iterator<Item = &'a Field> + 'a {
 	usdc.field_sets
 		.iter()
-		.skip(spec.field_set_index as usize)
-		.take_while(|&&x| x != Index::MAX)
-		.map(|&x| &usdc.fields[x as usize])
+		.skip(spec.field_set_index.0 as usize)
+		.take_while(|&&x| x != FieldIndex(Index::MAX))
+		.map(|&x| usdc.get_field(x))
 }
 
 trait Float {

@@ -11,6 +11,12 @@ impl Token {
 		}
 	}
 
+	pub fn empty() -> Self {
+		Token {
+			data: String::new(),
+		}
+	}
+
 	pub fn is_empty(&self) -> bool {
 		self.data.is_empty()
 	}

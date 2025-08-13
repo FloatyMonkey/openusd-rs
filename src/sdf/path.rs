@@ -2,7 +2,7 @@ use super::path_node::*;
 use crate::tf;
 
 /// A path value used to locate objects in layers or scenegraphs.
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Path {
 	pub(super) prim: PoolHandle,
 	pub(super) prop: PoolHandle,
@@ -55,6 +55,40 @@ impl Path {
 				let prim_node = prim_pool.get(self.prim).unwrap();
 				matches!(prim_node.data, PathNodeData::Prim { .. })
 			} || *self == Self::reflexive_relative_path())
+	}
+
+	/// Returns whether the path identifies a prim's property.
+	pub fn is_prim_property_path(&self) -> bool {
+		self.prop != INVALID_NODE_HANDLE && {
+			let prop_pool = PATH_PROP_PART_POOL.read().unwrap();
+			let prop_node = prop_pool.get(self.prop).unwrap();
+			matches!(prop_node.data, PathNodeData::PrimProperty { .. })
+		}
+	}
+
+	/// Returns whether the path or any of its parent paths identifies a variant selection for a prim.
+	pub fn contains_prim_variant_selection(&self) -> bool {
+		let prim_pool = PATH_PRIM_PART_POOL.read().unwrap();
+		prim_pool
+			.get(self.prim)
+			.map_or(false, |node| node.contains_prim_variant_selection())
+	}
+
+	/// Returns whether this path is or has a prefix that's a target path or a mapper path.
+	pub fn contains_target_path(&self) -> bool {
+		let prop_pool = PATH_PROP_PART_POOL.read().unwrap();
+		prop_pool
+			.get(self.prop)
+			.map_or(false, |node| node.contains_target_path())
+	}
+
+	/// Returns whether the path identifies a relationship or connection target.
+	pub fn is_target_path(&self) -> bool {
+		self.prop != INVALID_NODE_HANDLE && {
+			let prop_pool = PATH_PROP_PART_POOL.read().unwrap();
+			let prop_node = prop_pool.get(self.prop).unwrap();
+			matches!(prop_node.data, PathNodeData::Target { .. })
+		}
 	}
 
 	/// Return whether this path and `prefix` are not the empty path and this path has `prefix` as a prefix.
@@ -119,20 +153,44 @@ impl Path {
 	}
 
 	/// Returns the name of the prim, property or relational attribute identified by the path.
-	pub fn name(&self) -> String {
+	pub fn name_token(&self) -> tf::Token {
 		if self.prop != INVALID_NODE_HANDLE {
 			let prop_pool = PATH_PROP_PART_POOL.read().unwrap();
 			let prop_node = prop_pool.get(self.prop).unwrap();
-			return prop_node.name().to_string();
+			return prop_node.name().clone();
 		}
 
 		if self.prim != INVALID_NODE_HANDLE {
 			let prim_pool = PATH_PRIM_PART_POOL.read().unwrap();
 			let prim_node = prim_pool.get(self.prim).unwrap();
-			return prim_node.name().to_string();
+			return prim_node.name().clone();
 		}
 
-		String::new()
+		tf::Token::empty()
+	}
+
+	/// Returns a string representation of the "terminal" element of this path.
+	///
+	/// Empty, absolute root and reflexive relative paths are *not* considered elements
+	/// (one of the defining properties of elements is that they have a parent),
+	/// so this function will return an empty token for these paths.
+	///
+	/// Unlike [`Self::name_token`], which provides you "some" information about the terminal element,
+	/// this provides a complete representation of the element, for all element types.
+	pub fn element_token(&self) -> tf::Token {
+		if self.prop != INVALID_NODE_HANDLE {
+			let prop_pool = PATH_PROP_PART_POOL.read().unwrap();
+			let prop_node = prop_pool.get(self.prop).unwrap();
+			return prop_node.element().clone();
+		}
+
+		if self.prim != INVALID_NODE_HANDLE {
+			let prim_pool = PATH_PRIM_PART_POOL.read().unwrap();
+			let prim_node = prim_pool.get(self.prim).unwrap();
+			return prim_node.element().clone();
+		}
+
+		tf::Token::empty()
 	}
 }
 
@@ -467,6 +525,17 @@ mod tests {
 		assert_eq!(ancestors.next(), Some(p("/foo/bar")));
 		assert_eq!(ancestors.next(), Some(p("/foo")));
 		assert_eq!(ancestors.next(), None);
+	}
+
+	#[test]
+	fn element_token() {
+		assert!(Path::empty_path().element_token().is_empty());
+		assert!(Path::absolute_root_path().element_token().is_empty());
+		assert!(Path::reflexive_relative_path().element_token().is_empty());
+
+		assert_eq!(p("/foo").element_token(), t("foo"));
+		assert_eq!(p("/foo.prop").element_token(), t(".prop"));
+		assert_eq!(p("/foo{set=sel}").element_token(), t("{set=sel}"));
 	}
 
 	#[test]

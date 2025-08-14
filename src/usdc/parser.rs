@@ -801,19 +801,14 @@ fn unpack_value_rep(file: &UsdcFile, value: ValueRep) -> Result<Option<vt::Value
 		Type::Matrix3d => read_pod::<gf::Matrix3d>(&mut cursor)?.into(),
 		Type::Matrix4d => read_pod::<gf::Matrix4d>(&mut cursor)?.into(),
 
-
-
-
-    Type::PathVector => {
-        let indices: Vec<Index> = Vec::<Index>::read(file, &mut cursor)?; // if read() returns Result
-        let vector = indices
-            .iter()
-            .map(|&i| file.paths[i as usize].clone())
-            .collect::<vt::Array<sdf::Path>>();
-        vt::Value::new(vector)
-    }
-
-
+		Type::PathVector => {
+			let indices = Vec::<Index>::read(file, &mut cursor)?;
+			let vector = indices
+				.iter()
+				.map(|&i| file.paths[i as usize].clone())
+				.collect::<vt::Array<sdf::Path>>();
+			vt::Value::new(vector)
+		}
 
 		Type::TokenVector => {
 			let indices = Vec::<Index>::read(file, &mut cursor)?;
@@ -837,6 +832,12 @@ fn unpack_value_rep(file: &UsdcFile, value: ValueRep) -> Result<Option<vt::Value
 		Type::UIntListOp => sdf::UIntListOp::read(file, &mut cursor)?.into(),
 		Type::Int64ListOp => sdf::Int64ListOp::read(file, &mut cursor)?.into(),
 		Type::UInt64ListOp => sdf::UInt64ListOp::read(file, &mut cursor)?.into(),
+
+		Type::TokenListOp => sdf::TokenListOp::read(file, &mut cursor)?.into(),
+		Type::StringListOp => sdf::StringListOp::read(file, &mut cursor)?.into(),
+		Type::PathListOp => sdf::PathListOp::read(file, &mut cursor)?.into(),
+		Type::ReferenceListOp => sdf::ReferenceListOp::read(file, &mut cursor)?.into(),
+		Type::PayloadListOp => sdf::PayloadListOp::read(file, &mut cursor)?.into(),
 
 		Type::Dictionary => vt::Dictionary::read(file, &mut cursor)?.into(),
 
@@ -908,8 +909,8 @@ pub struct UsdcFile {
 	strings: Vec<Index>,
 }
 
-trait CrateIo<'a> {
-	fn read(file: &'a UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self>
+trait CrateIo {
+	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self>
 	where
 		Self: Sized;
 
@@ -927,14 +928,43 @@ fn read_contiguous<T: Clone>(cursor: &mut Cursor<&[u8]>, count: usize) -> Result
 	Ok(vec)
 }
 
-impl<T: Clone> CrateIo<'_> for Vec<T> {
+impl<T: Clone> CrateIo for Vec<T> {
 	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
 		let count = cursor.read_as::<u64>()? as usize;
 		read_contiguous(cursor, count)
 	}
 }
 
-impl<T: Clone + Default> CrateIo<'_> for sdf::ListOp<T> {
+fn read_typed_vec<T: CrateIo>(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Vec<T>> {
+	let count = cursor.read_as::<u64>()? as usize;
+	(0..count).map(|_| T::read(file, cursor)).collect()
+}
+
+fn write_typed_vec<T: CrateIo>(
+	file: &mut UsdcFile,
+	cursor: &mut Cursor<&mut [u8]>,
+	values: &[T],
+) -> Result<()> {
+	cursor.write_as(values.len() as u64)?;
+
+	for value in values {
+		value.write(file, cursor)?;
+	}
+
+	Ok(())
+}
+
+impl<T: Copy + crate::io_ext::Readable + crate::io_ext::Writeable> CrateIo for T {
+	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
+		Ok(cursor.read_as::<T>()?)
+	}
+
+	fn write(&self, file: &mut UsdcFile, cursor: &mut Cursor<&mut [u8]>) -> Result<()> {
+		cursor.write_as(*self)
+	}
+}
+
+impl<T: CrateIo + Default> CrateIo for sdf::ListOp<T> {
 	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
 		let h = ListOpHeader(cursor.read_as::<u8>()?);
 
@@ -945,27 +975,27 @@ impl<T: Clone + Default> CrateIo<'_> for sdf::ListOp<T> {
 		}
 
 		if h.has_explicit_items() {
-			list_op.explicit_items = Vec::read(file, cursor)?;
+			list_op.explicit_items = read_typed_vec(file, cursor)?;
 		}
 
 		if h.has_added_items() {
-			list_op.added_items = Vec::read(file, cursor)?;
+			list_op.added_items = read_typed_vec(file, cursor)?;
 		}
 
 		if h.has_prepended_items() {
-			list_op.prepended_items = Vec::read(file, cursor)?;
+			list_op.prepended_items = read_typed_vec(file, cursor)?;
 		}
 
 		if h.has_appended_items() {
-			list_op.appended_items = Vec::read(file, cursor)?;
+			list_op.appended_items = read_typed_vec(file, cursor)?;
 		}
 
 		if h.has_deleted_items() {
-			list_op.deleted_items = Vec::read(file, cursor)?;
+			list_op.deleted_items = read_typed_vec(file, cursor)?;
 		}
 
 		if h.has_ordered_items() {
-			list_op.ordered_items = Vec::read(file, cursor)?;
+			list_op.ordered_items = read_typed_vec(file, cursor)?;
 		}
 
 		Ok(list_op)
@@ -977,27 +1007,27 @@ impl<T: Clone + Default> CrateIo<'_> for sdf::ListOp<T> {
 		cursor.write_as::<u8>(h.0)?;
 
 		if h.has_explicit_items() {
-			self.explicit_items.write(file, cursor)?;
+			write_typed_vec(file, cursor, &self.explicit_items)?;
 		}
 
 		if h.has_added_items() {
-			self.added_items.write(file, cursor)?;
+			write_typed_vec(file, cursor, &self.added_items)?;
 		}
 
 		if h.has_prepended_items() {
-			self.prepended_items.write(file, cursor)?;
+			write_typed_vec(file, cursor, &self.prepended_items)?;
 		}
 
 		if h.has_appended_items() {
-			self.appended_items.write(file, cursor)?;
+			write_typed_vec(file, cursor, &self.appended_items)?;
 		}
 
 		if h.has_deleted_items() {
-			self.deleted_items.write(file, cursor)?;
+			write_typed_vec(file, cursor, &self.deleted_items)?;
 		}
 
 		if h.has_ordered_items() {
-			self.ordered_items.write(file, cursor)?;
+			write_typed_vec(file, cursor, &self.ordered_items)?;
 		}
 
 		Ok(())
@@ -1058,30 +1088,30 @@ impl UsdcFile {
 		&self.paths[index as usize]
 	}
 
-	fn read<'a, T: CrateIo<'a>>(&'a self, cursor: &mut Cursor<&[u8]>) -> Result<T> {
+	fn read<T: CrateIo>(&self, cursor: &mut Cursor<&[u8]>) -> Result<T> {
 		T::read(self, cursor)
 	}
 }
 
-impl CrateIo<'_> for String {
+impl CrateIo for String {
 	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
 		Ok(file.get_string(cursor.read_as::<Index>()?).to_string())
 	}
 }
 
-impl CrateIo<'_> for tf::Token {
+impl CrateIo for tf::Token {
 	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
 		Ok(file.get_token(cursor.read_as::<Index>()?).clone())
 	}
 }
 
-impl CrateIo<'_> for sdf::Path {
+impl CrateIo for sdf::Path {
 	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
 		Ok(file.get_path(cursor.read_as::<Index>()?).clone())
 	}
 }
 
-impl CrateIo<'_> for sdf::LayerOffset {
+impl CrateIo for sdf::LayerOffset {
 	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
 		Ok(Self {
 			offset: cursor.read_as::<f64>()?,
@@ -1094,7 +1124,7 @@ thread_local! {
 	static LOCAL_UNPACK_RECURSION_GUARD: RefCell<HashSet<u64>> = RefCell::new(HashSet::new());
 }
 
-impl CrateIo<'_> for vt::Value {
+impl CrateIo for vt::Value {
 	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
 		let offset = cursor.read_as::<i64>()?;
 		cursor.seek_relative(offset - 8)?;
@@ -1115,7 +1145,7 @@ impl CrateIo<'_> for vt::Value {
 	}
 }
 
-impl CrateIo<'_> for vt::Dictionary {
+impl CrateIo for vt::Dictionary {
 	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
 		let size = cursor.read_as::<u64>()? as usize;
 
@@ -1130,13 +1160,23 @@ impl CrateIo<'_> for vt::Dictionary {
 	}
 }
 
-impl CrateIo<'_> for sdf::Reference {
+impl CrateIo for sdf::Reference {
 	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
 		Ok(Self {
 			asset_path: file.read::<String>(cursor)?,
 			prim_path: file.read::<sdf::Path>(cursor)?,
 			layer_offset: file.read::<sdf::LayerOffset>(cursor)?,
 			custom_data: file.read::<vt::Dictionary>(cursor)?,
+		})
+	}
+}
+
+impl CrateIo for sdf::Payload {
+	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
+		Ok(Self {
+			asset_path: file.read::<String>(cursor)?,
+			prim_path: file.read::<sdf::Path>(cursor)?,
+			layer_offset: file.read::<sdf::LayerOffset>(cursor)?,
 		})
 	}
 }

@@ -1,5 +1,5 @@
 use super::Property;
-use crate::{sdf, usd, vt};
+use crate::{sdf, usd};
 
 /// A [`usd::Relationship`] creates dependencies between scenegraph objects by allowing a prim to target other prims, attributes, or relationships.
 #[repr(transparent)]
@@ -11,10 +11,14 @@ impl<'a> Relationship<'a> {
 	}
 }
 
+/// Editing Relationships at current EditTarget
 impl<'a> Relationship<'a> {
-    pub fn targets(&self) -> Option<vt::Array<sdf::Path>> {
-        self.metadata::<vt::Array<sdf::Path>>(&sdf::FIELD_KEYS.target_paths)
-    }
+	/// Compose this relationship's targets and return the result.
+	pub fn targets(&self) -> Vec<sdf::Path> {
+		self.metadata::<sdf::PathListOp>(&sdf::FIELD_KEYS.target_paths)
+			.unwrap_or_default()
+			.explicit_items
+	}
 }
 
 impl<'a> std::ops::Deref for Relationship<'a> {

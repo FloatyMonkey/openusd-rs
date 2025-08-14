@@ -11,6 +11,16 @@ impl<'a> Relationship<'a> {
 	}
 }
 
+/// Editing Relationships at current EditTarget
+impl<'a> Relationship<'a> {
+	/// Compose this relationship's targets and return the result.
+	pub fn targets(&self) -> Vec<sdf::Path> {
+		self.metadata::<sdf::PathListOp>(&sdf::FIELD_KEYS.target_paths)
+			.unwrap_or_default()
+			.explicit_items
+	}
+}
+
 impl<'a> std::ops::Deref for Relationship<'a> {
 	type Target = Property<'a>;
 	fn deref(&self) -> &Self::Target {

@@ -39,7 +39,6 @@ impl Imageable<'_> {
 	pub fn purpose_attr(&self) -> usd::Attribute<'_> {
 		self.prim().attribute(&TOKENS.purpose)
 	}
-
 }
 
 impl<'a> std::ops::Deref for Imageable<'a> {
@@ -60,7 +59,6 @@ impl Xformable<'_> {
 	pub fn xform_op_order_attr(&self) -> usd::Attribute<'_> {
 		self.prim().attribute(&TOKENS.xform_op_order)
 	}
-
 }
 
 impl<'a> std::ops::Deref for Xformable<'a> {
@@ -77,7 +75,6 @@ impl Boundable<'_> {
 	pub fn define(stage: &usd::Stage, path: impl Into<sdf::Path>) -> Boundable<'_> {
 		Boundable(usd::SchemaBase::new(stage.prim_at_path(path)))
 	}
-
 }
 
 impl<'a> std::ops::Deref for Boundable<'a> {
@@ -94,7 +91,6 @@ impl Gprim<'_> {
 	pub fn define(stage: &usd::Stage, path: impl Into<sdf::Path>) -> Gprim<'_> {
 		Gprim(usd::SchemaBase::new(stage.prim_at_path(path)))
 	}
-
 }
 
 impl<'a> std::ops::Deref for Gprim<'a> {
@@ -119,7 +115,6 @@ impl PointBased<'_> {
 	pub fn normals_attr(&self) -> usd::Attribute<'_> {
 		self.prim().attribute(&TOKENS.normals)
 	}
-
 }
 
 impl<'a> std::ops::Deref for PointBased<'a> {
@@ -144,7 +139,6 @@ impl Mesh<'_> {
 	pub fn face_vertex_counts_attr(&self) -> usd::Attribute<'_> {
 		self.prim().attribute(&TOKENS.face_vertex_counts)
 	}
-
 }
 
 impl<'a> std::ops::Deref for Mesh<'a> {
@@ -205,7 +199,6 @@ impl PointInstancer<'_> {
 	pub fn invisible_ids_attr(&self) -> usd::Attribute<'_> {
 		self.prim().attribute(&TOKENS.invisible_ids)
 	}
-
 }
 
 impl<'a> std::ops::Deref for PointInstancer<'a> {

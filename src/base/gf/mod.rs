@@ -159,11 +159,9 @@ impl Matrix4d {
 	pub fn new() -> Self {
 		Self::default()
 	}
-  impl Matrix4d {
-    pub fn as_array(&self) -> &[[f64; 4]; 4] {
-        &self.data
-    }
-  }  
+	pub fn as_array(&self) -> &[[f64; 4]; 4] {
+		&self.data
+	}
 	pub fn from_diagonal(diagonal: Vec4d) -> Self {
 		Self {
 			data: [

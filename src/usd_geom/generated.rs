@@ -167,17 +167,12 @@ impl Mesh<'_> {
 	}
 
 	// --- NEW: Primvar access ---
-
 	pub fn has_primvar(&self, name: &Token) -> bool {
+		// primvars are stored as attributes with "primvars:<name>"
 		let primvar_name = format!("primvars:{}", name);
-		let tok = Token::new(&primvar_name);
-		if self.prim().has_attribute(&tok) {
-			let attr = self.prim().attribute(&tok);
-			attr.has_authored_value() // this is in openusd-rs
-		} else {
-			false
-		}
+		self.prim().has_attribute(&Token::new(&primvar_name))
 	}
+
 	pub fn primvar(&self, name: &Token) -> usd::Attribute<'_> {
 		let primvar_name = format!("primvars:{}", name);
 		self.prim().attribute(&Token::new(&primvar_name))

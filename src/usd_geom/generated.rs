@@ -173,10 +173,10 @@ impl Mesh<'_> {
 		self.prim().has_attribute(&Token::new(&primvar_name))
 	}
 
-  pub fn primvar_attr(&self, name: &Token) -> usd::Attribute<'_> {
-    let primvar_name = format!("primvars:{}", name);
-    self.prim().attribute(&Token::new(&primvar_name))
-  }
+	pub fn primvar_attr(&self, name: &Token) -> usd::Attribute<'_> {
+		let primvar_name = format!("primvars:{}", name);
+		self.prim().attribute(&Token::new(&primvar_name))
+	}
 }
 
 impl<'a> std::ops::Deref for Mesh<'a> {

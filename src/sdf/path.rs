@@ -57,7 +57,24 @@ impl Path {
 			} || *self == Self::reflexive_relative_path())
 	}
 
+	/// Returns whether the path identifies a property.
+	///
+	/// A relational attribute is considered to be a property,
+	/// so this method will return true for relational attributes as well as properties of prims.
+	pub fn is_property_path(&self) -> bool {
+		self.prop != INVALID_NODE_HANDLE && {
+			let prop_pool = PATH_PROP_PART_POOL.read().unwrap();
+			let prop_node = prop_pool.get(self.prop).unwrap();
+			matches!(
+				prop_node.data,
+				PathNodeData::PrimProperty { .. } | PathNodeData::RelationalAttribute { .. }
+			)
+		}
+	}
+
 	/// Returns whether the path identifies a prim's property.
+	///
+	/// A relational attribute is not a prim property.
 	pub fn is_prim_property_path(&self) -> bool {
 		self.prop != INVALID_NODE_HANDLE && {
 			let prop_pool = PATH_PROP_PART_POOL.read().unwrap();

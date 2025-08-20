@@ -1,5 +1,5 @@
 /// Token for efficient comparison, assignment, and hashing of known strings.
-#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Token {
 	data: String,
 }

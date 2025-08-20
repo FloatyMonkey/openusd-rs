@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::{
 	cell::RefCell,
 	collections::HashSet,
-	io::{Cursor, Read, Seek, Write},
+	io::{Cursor, Read, Seek, SeekFrom, Write},
 };
 
 use half::f16;
@@ -61,21 +61,27 @@ impl Section {
 	const PATHS: &str = "PATHS";
 	const SPECS: &str = "SPECS";
 
+	const KNOWN_SECTIONS: &[&str] = &[
+		Self::TOKENS,
+		Self::STRINGS,
+		Self::FIELDS,
+		Self::FIELDSETS,
+		Self::PATHS,
+		Self::SPECS,
+	];
+
 	fn name(&self) -> Option<&str> {
 		let len = self.name.iter().position(|&x| x == 0)?;
-		std::str::from_utf8(&self.name[0..len]).ok()
+		str::from_utf8(&self.name[0..len]).ok()
+	}
+
+	fn is_known(&self) -> bool {
+		self.name()
+			.is_some_and(|name| Self::KNOWN_SECTIONS.contains(&name))
 	}
 }
 
-const KNOWN_SECTIONS: &[&str] = &[
-	Section::TOKENS,
-	Section::STRINGS,
-	Section::FIELDS,
-	Section::FIELDSETS,
-	Section::PATHS,
-	Section::SPECS,
-];
-
+#[derive(Default)]
 struct TableOfContents {
 	sections: Vec<Section>,
 }
@@ -83,6 +89,15 @@ struct TableOfContents {
 impl TableOfContents {
 	fn section(&self, name: &str) -> Option<&Section> {
 		self.sections.iter().find(|s| s.name() == Some(name))
+	}
+
+	fn add_section(&mut self, name: &str, start: u64, size: u64) {
+		let name = {
+			let mut arr = [0u8; 16];
+			arr[..name.len()].copy_from_slice(name.as_bytes());
+			arr
+		};
+		self.sections.push(Section { name, start, size });
 	}
 
 	fn minimum_section_start(&self) -> u64 {
@@ -951,8 +966,8 @@ fn unpack_value_rep(file: &UsdcFile, value: ValueRep) -> Result<Option<vt::Value
 			let indices = Vec::<Index>::read(file, &mut cursor)?;
 			let vector = indices
 				.iter()
-				.map(|&i| file.paths[i as usize].clone())
-				.collect::<vt::Array<sdf::Path>>();
+				.map(|i| file.get_path(PathIndex(*i)).clone())
+				.collect::<vt::Array<_>>();
 			vt::Value::new(vector)
 		}
 
@@ -1047,6 +1062,8 @@ pub struct UsdcFile {
 	tokens: Vec<tf::Token>,
 	strings: Vec<TokenIndex>,
 
+	toc: TableOfContents,
+
 	pack_ctx: PackCtx,
 }
 
@@ -1059,10 +1076,83 @@ struct PackCtx {
 	field_index_from_field: HashMap<Field, FieldIndex>,
 
 	// Mapping from a group of fields to their starting index in field_sets.
-	field_set_index_from_field_index: HashMap<Vec<FieldIndex>, FieldSetIndex>,
+	field_set_index_from_fields: HashMap<Vec<FieldIndex>, FieldSetIndex>,
 
 	// Unknown sections we're moving to the new structural area.
 	unknown_sections: Vec<(String, Vec<u8>)>,
+}
+
+impl PackCtx {
+	fn new(usdc: &UsdcFile) -> Self {
+		let token_index_from_token = usdc
+			.tokens
+			.iter()
+			.enumerate()
+			.map(|(i, token)| (token.clone(), TokenIndex(i as Index)))
+			.collect::<HashMap<_, _>>();
+
+		let string_index_from_string = usdc
+			.strings
+			.iter()
+			.enumerate()
+			.map(|(i, _)| {
+				let index = StringIndex(i as Index);
+				(usdc.get_string(index).to_string(), index)
+			})
+			.collect::<HashMap<_, _>>();
+
+		let path_index_from_path = usdc
+			.paths
+			.iter()
+			.enumerate()
+			.map(|(i, path)| (path.clone(), PathIndex(i as Index)))
+			.collect::<HashMap<_, _>>();
+
+		let field_index_from_field = usdc
+			.fields
+			.iter()
+			.enumerate()
+			.map(|(i, field)| (field.clone(), FieldIndex(i as Index)))
+			.collect::<HashMap<_, _>>();
+
+		// TODO: Unsure if this is correct
+		let base = usdc.field_sets.as_ptr();
+		let field_set_index_from_fields = usdc
+			.field_sets
+			.split(|&f| f.0 == 0)
+			.map(|s| {
+				// TODO: Remove unsafe code
+				let start = unsafe { s.as_ptr().offset_from(base) as usize }; // total index into the original slice
+				(s.to_vec(), FieldSetIndex(start as Index))
+			})
+			.collect::<HashMap<_, _>>();
+
+		// Read in any unknown sections so we can rewrite them later.
+		let unknown_sections = usdc
+			.toc
+			.sections
+			.iter()
+			.filter(|s| !s.is_known())
+			.map(|s| {
+				let (start, end) = (s.start as usize, s.start as usize + s.size as usize);
+				(s.name().unwrap().into(), usdc.buffer[start..end].into())
+			})
+			.collect::<Vec<_>>();
+
+		// Set file pos to start of the structural sections in the current TOC.
+		// cursor.seek(usdc.toc.minimum_section_start())
+
+		Self {
+			token_index_from_token,
+			string_index_from_string,
+			path_index_from_path,
+			field_index_from_field,
+
+			field_set_index_from_fields,
+
+			unknown_sections,
+		}
+	}
 }
 
 trait CrateIo {
@@ -1129,27 +1219,21 @@ impl<T: CrateIo + Default> CrateIo for sdf::ListOp<T> {
 		if h.is_explicit() {
 			list_op.is_explicit = true;
 		}
-
 		if h.has_explicit_items() {
 			list_op.explicit_items = read_typed_vec(file, cursor)?;
 		}
-
 		if h.has_added_items() {
 			list_op.added_items = read_typed_vec(file, cursor)?;
 		}
-
 		if h.has_prepended_items() {
 			list_op.prepended_items = read_typed_vec(file, cursor)?;
 		}
-
 		if h.has_appended_items() {
 			list_op.appended_items = read_typed_vec(file, cursor)?;
 		}
-
 		if h.has_deleted_items() {
 			list_op.deleted_items = read_typed_vec(file, cursor)?;
 		}
-
 		if h.has_ordered_items() {
 			list_op.ordered_items = read_typed_vec(file, cursor)?;
 		}
@@ -1165,23 +1249,18 @@ impl<T: CrateIo + Default> CrateIo for sdf::ListOp<T> {
 		if h.has_explicit_items() {
 			write_typed_vec(file, cursor, &self.explicit_items)?;
 		}
-
 		if h.has_added_items() {
 			write_typed_vec(file, cursor, &self.added_items)?;
 		}
-
 		if h.has_prepended_items() {
 			write_typed_vec(file, cursor, &self.prepended_items)?;
 		}
-
 		if h.has_appended_items() {
 			write_typed_vec(file, cursor, &self.appended_items)?;
 		}
-
 		if h.has_deleted_items() {
 			write_typed_vec(file, cursor, &self.deleted_items)?;
 		}
-
 		if h.has_ordered_items() {
 			write_typed_vec(file, cursor, &self.ordered_items)?;
 		}
@@ -1227,9 +1306,90 @@ impl UsdcFile {
 			field_sets,
 			paths,
 			specs,
+			toc,
 
 			pack_ctx: PackCtx::default(),
 		})
+	}
+
+	pub fn save(&mut self, asset_path: &std::path::Path) -> Result<()> {
+		let mut sorted_paths = self.paths.clone();
+
+		// Sort by path for better namespace-grouped data layout.
+		// Prim paths before property paths, then property paths grouped by property name.
+		sorted_paths.sort_by(|a, b| {
+			let a_is_prop = a.is_prim_property_path();
+			let b_is_prop = b.is_prim_property_path();
+
+			if a_is_prop != b_is_prop {
+				return if a_is_prop {
+					std::cmp::Ordering::Greater
+				} else {
+					std::cmp::Ordering::Less
+				};
+			}
+
+			if a_is_prop && b_is_prop {
+				let an = a.name_token();
+				let bn = b.name_token();
+
+				if an != bn {
+					return an.cmp(&bn);
+				}
+			}
+
+			a.cmp(b)
+		});
+
+		// TODO: Implement the rest of the save function
+		Ok(())
+	}
+
+	fn write_sections(&mut self) -> Result<()> {
+		// TODO: Implement the write function
+
+		let mut cursor = Cursor::new(Vec::<u8>::new());
+
+		let mut toc = TableOfContents::default();
+
+		// TODO: Write out the sections we don't know about that the packing context captured.
+
+		let start = cursor.position() as u64;
+		write_tokens(&mut cursor, &self.tokens)?;
+		toc.add_section(Section::TOKENS, start, cursor.position() as u64 - start);
+
+		let start = cursor.position() as u64;
+		write_strings(&mut cursor, &self.strings)?;
+		toc.add_section(Section::STRINGS, start, cursor.position() as u64 - start);
+
+		let start = cursor.position() as u64;
+		write_fields(&mut cursor, &self.fields)?;
+		toc.add_section(Section::FIELDS, start, cursor.position() as u64 - start);
+
+		let start = cursor.position() as u64;
+		write_field_sets(&mut cursor, &self.field_sets)?;
+		toc.add_section(Section::FIELDSETS, start, cursor.position() as u64 - start);
+
+		let start = cursor.position() as u64;
+		write_paths(&mut cursor, &self.paths, &self)?;
+		toc.add_section(Section::PATHS, start, cursor.position() as u64 - start);
+
+		let start = cursor.position() as u64;
+		write_specs(&mut cursor, &self.specs)?;
+		toc.add_section(Section::SPECS, start, cursor.position() as u64 - start);
+
+		let toc_offset = cursor.position() as u64;
+		// TODO: Write toc
+
+		cursor.seek(SeekFrom::Start(0))?;
+		// TODO: Write bootstrap
+
+		self.toc = toc;
+		//self.boot = boot;
+
+		// TODO: Clear value handler dedup tables
+
+		Ok(())
 	}
 }
 
@@ -1308,7 +1468,7 @@ impl UsdcFile {
 	fn add_field_set(&mut self, field_indices: &Vec<FieldIndex>) -> FieldSetIndex {
 		*self
 			.pack_ctx
-			.field_set_index_from_field_index
+			.field_set_index_from_fields
 			.entry(field_indices.clone())
 			.or_insert_with(|| {
 				let index = FieldSetIndex(self.field_sets.len() as u32);
@@ -1388,35 +1548,45 @@ impl UsdcFile {
 	fn read<T: CrateIo>(&self, cursor: &mut Cursor<&[u8]>) -> Result<T> {
 		T::read(self, cursor)
 	}
+
+	fn write<T: CrateIo>(&mut self, value: &T, cursor: &mut Cursor<&mut [u8]>) -> Result<()> {
+		value.write(self, cursor)
+	}
 }
 
 impl CrateIo for String {
 	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
-		let index = StringIndex(cursor.read_as::<Index>()?);
+		let index = StringIndex(cursor.read_as()?);
 		Ok(file.get_string(index).to_string())
+	}
+
+	fn write(&self, file: &mut UsdcFile, cursor: &mut Cursor<&mut [u8]>) -> Result<()> {
+		let index = file.add_string(self);
+		cursor.write_as(index.0)
 	}
 }
 
 impl CrateIo for tf::Token {
 	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
-		let index = TokenIndex(cursor.read_as::<Index>()?);
+		let index = TokenIndex(cursor.read_as()?);
 		Ok(file.get_token(index).clone())
+	}
+
+	fn write(&self, file: &mut UsdcFile, cursor: &mut Cursor<&mut [u8]>) -> Result<()> {
+		let index = file.add_token(self);
+		cursor.write_as(index.0)
 	}
 }
 
 impl CrateIo for sdf::Path {
 	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
-		let index = PathIndex(cursor.read_as::<Index>()?);
+		let index = PathIndex(cursor.read_as()?);
 		Ok(file.get_path(index).clone())
 	}
-}
 
-impl CrateIo for sdf::LayerOffset {
-	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
-		Ok(Self {
-			offset: cursor.read_as::<f64>()?,
-			scale: cursor.read_as::<f64>()?,
-		})
+	fn write(&self, file: &mut UsdcFile, cursor: &mut Cursor<&mut [u8]>) -> Result<()> {
+		let index = file.add_path(self);
+		cursor.write_as(index.0)
 	}
 }
 
@@ -1460,6 +1630,21 @@ impl CrateIo for vt::Dictionary {
 	}
 }
 
+impl CrateIo for sdf::LayerOffset {
+	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
+		Ok(Self {
+			offset: cursor.read_as::<f64>()?,
+			scale: cursor.read_as::<f64>()?,
+		})
+	}
+
+	fn write(&self, file: &mut UsdcFile, cursor: &mut Cursor<&mut [u8]>) -> Result<()> {
+		cursor.write_as::<f64>(self.offset)?;
+		cursor.write_as::<f64>(self.scale)?;
+		Ok(())
+	}
+}
+
 impl CrateIo for sdf::Reference {
 	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
 		Ok(Self {
@@ -1468,6 +1653,14 @@ impl CrateIo for sdf::Reference {
 			layer_offset: file.read::<sdf::LayerOffset>(cursor)?,
 			custom_data: file.read::<vt::Dictionary>(cursor)?,
 		})
+	}
+
+	fn write(&self, file: &mut UsdcFile, cursor: &mut Cursor<&mut [u8]>) -> Result<()> {
+		file.write::<String>(&self.asset_path, cursor)?;
+		file.write::<sdf::Path>(&self.prim_path, cursor)?;
+		file.write::<sdf::LayerOffset>(&self.layer_offset, cursor)?;
+		file.write::<vt::Dictionary>(&self.custom_data, cursor)?;
+		Ok(())
 	}
 }
 
@@ -1478,6 +1671,28 @@ impl CrateIo for sdf::Payload {
 			prim_path: file.read::<sdf::Path>(cursor)?,
 			layer_offset: file.read::<sdf::LayerOffset>(cursor)?,
 		})
+	}
+
+	fn write(&self, file: &mut UsdcFile, cursor: &mut Cursor<&mut [u8]>) -> Result<()> {
+		file.write::<String>(&self.asset_path, cursor)?;
+		file.write::<sdf::Path>(&self.prim_path, cursor)?;
+		file.write::<sdf::LayerOffset>(&self.layer_offset, cursor)?;
+		Ok(())
+	}
+}
+
+impl CrateIo for sdf::Relocate {
+	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
+		Ok(Self {
+			source: file.read::<sdf::Path>(cursor)?,
+			target: file.read::<sdf::Path>(cursor)?,
+		})
+	}
+
+	fn write(&self, file: &mut UsdcFile, cursor: &mut Cursor<&mut [u8]>) -> Result<()> {
+		file.write::<sdf::Path>(&self.source, cursor)?;
+		file.write::<sdf::Path>(&self.target, cursor)?;
+		Ok(())
 	}
 }
 

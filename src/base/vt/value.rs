@@ -74,11 +74,16 @@ pub enum ValueStore {
 	Vec4h(gf::Vec4h),
 	Vec4f(gf::Vec4f),
 	Vec4fArray(Array<gf::Vec4f>),
+	Vec4dArray(Array<gf::Vec4d>),
 	Vec4d(gf::Vec4d),
 
 	Quath(gf::Quath),
 	Quatf(gf::Quatf),
 	Quatd(gf::Quatd),
+
+	QuathArray(vt::Array<gf::Quath>),
+	QuatfArray(vt::Array<gf::Quatf>),
+	QuatdArray(vt::Array<gf::Quatd>),
 
 	Matrix2d(gf::Matrix2d),
 	Matrix3d(gf::Matrix3d),
@@ -225,10 +230,15 @@ impl_value_type_deref!(gf::Vec4h, Vec4h);
 impl_value_type_deref!(gf::Vec4f, Vec4f);
 impl_value_type_clone!(Array<gf::Vec4f>, Vec4fArray);
 impl_value_type_deref!(gf::Vec4d, Vec4d);
+impl_value_type_clone!(Array<gf::Vec4d>, Vec4dArray);
 
 impl_value_type_deref!(gf::Quath, Quath);
 impl_value_type_deref!(gf::Quatf, Quatf);
 impl_value_type_deref!(gf::Quatd, Quatd);
+
+impl_value_type_clone!(Array<gf::Quath>, QuathArray);
+impl_value_type_clone!(Array<gf::Quatf>, QuatfArray);
+impl_value_type_clone!(Array<gf::Quatd>, QuatdArray);
 
 impl_value_type_deref!(gf::Matrix2d, Matrix2d);
 impl_value_type_deref!(gf::Matrix3d, Matrix3d);

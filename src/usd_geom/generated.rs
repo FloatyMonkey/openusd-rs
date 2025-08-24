@@ -108,12 +108,31 @@ impl PointBased<'_> {
 		PointBased(usd::SchemaBase::new(stage.prim_at_path(path)))
 	}
 
+	// --- points ---
+	pub fn has_points_attr(&self) -> bool {
+		self.prim().has_attribute(&TOKENS.points)
+	}
 	pub fn points_attr(&self) -> usd::Attribute<'_> {
 		self.prim().attribute(&TOKENS.points)
 	}
 
+	// --- normals ---
+	pub fn has_normals_attr(&self) -> bool {
+		self.prim().has_attribute(&TOKENS.normals)
+	}
 	pub fn normals_attr(&self) -> usd::Attribute<'_> {
 		self.prim().attribute(&TOKENS.normals)
+	}
+
+	// --- primvars ---
+	pub fn has_primvar(&self, name: &tf::Token) -> bool {
+		let token = tf::Token::new(format!("primvars:{}", name.as_str()));
+		self.prim().has_attribute(&token)
+	}
+
+	pub fn primvar(&self, name: &tf::Token) -> usd::Attribute<'_> {
+		let token = tf::Token::new(format!("primvars:{}", name.as_str()));
+		self.prim().attribute(&token)
 	}
 }
 
@@ -132,10 +151,18 @@ impl Mesh<'_> {
 		Mesh(usd::SchemaBase::new(stage.prim_at_path(path)))
 	}
 
+	// --- face vertex indices ---
+	pub fn has_face_vertex_indices_attr(&self) -> bool {
+		self.prim().has_attribute(&TOKENS.face_vertex_indices)
+	}
 	pub fn face_vertex_indices_attr(&self) -> usd::Attribute<'_> {
 		self.prim().attribute(&TOKENS.face_vertex_indices)
 	}
 
+	// --- face vertex counts ---
+	pub fn has_face_vertex_counts_attr(&self) -> bool {
+		self.prim().has_attribute(&TOKENS.face_vertex_counts)
+	}
 	pub fn face_vertex_counts_attr(&self) -> usd::Attribute<'_> {
 		self.prim().attribute(&TOKENS.face_vertex_counts)
 	}

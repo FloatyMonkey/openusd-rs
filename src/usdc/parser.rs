@@ -778,15 +778,13 @@ fn unpack_value_rep(file: &UsdcFile, value: ValueRep) -> Result<Option<vt::Value
 
 		Type::Vec3f if value.is_array() => read_pod_vec::<gf::Vec3f>(&mut cursor)?.into(),
 
-
-    Type::Quath if value.is_array() => read_pod_vec::<gf::Quath>(&mut cursor)?.into(),
-    Type::Quatf if value.is_array() => read_pod_vec::<gf::Quatf>(&mut cursor)?.into(),
-    Type::Quatd if value.is_array() => read_pod_vec::<gf::Quatd>(&mut cursor)?.into(),
+		Type::Quath if value.is_array() => read_pod_vec::<gf::Quath>(&mut cursor)?.into(),
+		Type::Quatf if value.is_array() => read_pod_vec::<gf::Quatf>(&mut cursor)?.into(),
+		Type::Quatd if value.is_array() => read_pod_vec::<gf::Quatd>(&mut cursor)?.into(),
 
 		Type::Quath => read_pod::<gf::Quath>(&mut cursor)?.into(),
 		Type::Quatf => read_pod::<gf::Quatf>(&mut cursor)?.into(),
 		Type::Quatd => read_pod::<gf::Quatd>(&mut cursor)?.into(),
-
 
 		Type::Vec2h => read_pod::<gf::Vec2h>(&mut cursor)?.into(),
 		Type::Vec2f => read_pod::<gf::Vec2f>(&mut cursor)?.into(),

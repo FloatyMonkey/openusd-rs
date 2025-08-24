@@ -130,13 +130,13 @@ impl PointBased<'_> {
 
     
     // --- primvars ---
-    pub fn has_primvar(&self, name: &usd::Token) -> bool {
-        let token = usd::Token::new(format!("primvars:{}", name.as_str()));
+    pub fn has_primvar(&self, name: &tf::Token) -> bool {
+        let token = tf::Token::new(format!("primvars:{}", name.as_str()));
         self.prim().has_attribute(&token)
     }
 
-    pub fn primvar(&self, name: &usd::Token) -> usd::Attribute<'_> {
-        let token = usd::Token::new(format!("primvars:{}", name.as_str()));
+    pub fn primvar(&self, name: &tf::Token) -> usd::Attribute<'_> {
+        let token = tf::Token::new(format!("primvars:{}", name.as_str()));
         self.prim().attribute(&token)
     }
 }

@@ -127,7 +127,20 @@ impl PointBased<'_> {
     pub fn normals_attr(&self) -> usd::Attribute<'_> {
         self.prim().attribute(&TOKENS.normals)
     }
+
+    
+    // --- primvars ---
+    pub fn has_primvar(&self, name: &usd::Token) -> bool {
+        let token = usd::Token::new(format!("primvars:{}", name.as_str()));
+        self.prim().has_attribute(&token)
+    }
+
+    pub fn primvar(&self, name: &usd::Token) -> usd::Attribute<'_> {
+        let token = usd::Token::new(format!("primvars:{}", name.as_str()));
+        self.prim().attribute(&token)
+    }
 }
+
 
 impl<'a> std::ops::Deref for PointBased<'a> {
 	type Target = Gprim<'a>;

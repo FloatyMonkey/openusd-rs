@@ -509,11 +509,7 @@ impl Matrix4d {
 
 	pub fn handedness(&self) -> f64 {
 		let d = self.determinant3();
-		if d >= 0.0 {
-			1.0
-		} else {
-			-1.0
-		}
+		if d >= 0.0 { 1.0 } else { -1.0 }
 	}
 
 	pub fn is_right_handed(&self) -> bool {

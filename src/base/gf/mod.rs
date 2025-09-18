@@ -156,6 +156,20 @@ pub struct Matrix4d {
 
 impl Matrix4d {
 	// ---- Constructors ----
+	pub fn b_post_mult(&self, rhs: &Matrix4d) -> Matrix4d {
+		let mut out = [[0.0f64; 4]; 4];
+		for i in 0..4 {
+			for j in 0..4 {
+				out[i][j] = (0..4).map(|k| self[i][k] * rhs[k][j]).sum();
+			}
+		}
+		Matrix4d::from_array(out)
+	}
+
+	pub fn b_pre_mult(&self, lhs: &Matrix4d) -> Matrix4d {
+		lhs.b_post_mult(self)
+	}
+
 	pub fn new() -> Self {
 		Self::default()
 	}
@@ -495,7 +509,11 @@ impl Matrix4d {
 
 	pub fn handedness(&self) -> f64 {
 		let d = self.determinant3();
-		if d >= 0.0 { 1.0 } else { -1.0 }
+		if d >= 0.0 {
+			1.0
+		} else {
+			-1.0
+		}
 	}
 
 	pub fn is_right_handed(&self) -> bool {

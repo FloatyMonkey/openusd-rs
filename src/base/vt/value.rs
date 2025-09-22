@@ -35,6 +35,10 @@ impl Value {
 	pub fn get_unchecked<T: ValueType>(&self) -> T {
 		T::load(&self.store).unwrap()
 	}
+
+	pub fn is_holding<T: ValueType>(&self) -> bool {
+		T::load(&self.store).is_some()
+	}
 }
 
 #[derive(Debug, Clone)]

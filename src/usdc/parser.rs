@@ -1006,50 +1006,6 @@ fn unpack_value_rep(file: &UsdcFile, value: ValueRep) -> Result<Option<vt::Value
 	}))
 }
 
-impl sdf::AbstractData for UsdcFile {
-	fn get(&self, path: &sdf::Path, field: &tf::Token) -> Option<vt::Value> {
-		let path_index = PathIndex(self.paths.iter().position(|p| *p == *path)? as u32);
-
-		let spec = self.specs.iter().find(|s| s.path_index == path_index)?;
-
-		let field = fields(self, spec).find(|f| self.get_token(f.token_index) == field)?;
-
-		unpack_value_rep(self, field.value_rep).unwrap()
-	}
-
-	fn spec_type(&self, path: &sdf::Path) -> Option<sdf::SpecType> {
-		let path_index = PathIndex(self.paths.iter().position(|p| *p == *path)? as u32);
-
-		self.specs
-			.iter()
-			.find(|s| s.path_index == path_index)
-			.map(|spec| spec.spec_type)
-	}
-
-	fn list(&self, path: &sdf::Path) -> Vec<&tf::Token> {
-		let path_index = match self.paths.iter().position(|p| *p == *path) {
-			Some(index) => PathIndex(index as u32),
-			None => return Vec::new(),
-		};
-
-		let spec = match self.specs.iter().find(|s| s.path_index == path_index) {
-			Some(spec) => spec,
-			None => return Vec::new(),
-		};
-
-		fields(self, spec)
-			.map(|field| self.get_token(field.token_index))
-			.collect()
-	}
-
-	fn visit_specs(&self) -> Vec<&sdf::Path> {
-		self.specs
-			.iter()
-			.map(|spec| self.get_path(spec.path_index))
-			.collect()
-	}
-}
-
 pub struct UsdcFile {
 	version: Version,
 	buffer: Vec<u8>,
@@ -1119,7 +1075,7 @@ impl PackCtx {
 		let base = usdc.field_sets.as_ptr();
 		let field_set_index_from_fields = usdc
 			.field_sets
-			.split(|&f| f.0 == 0)
+			.split(|&f| f == FieldIndex(Index::MAX))
 			.map(|s| {
 				// TODO: Remove unsafe code
 				let start = unsafe { s.as_ptr().offset_from(base) as usize }; // total index into the original slice
@@ -1312,39 +1268,6 @@ impl UsdcFile {
 		})
 	}
 
-	pub fn save(&mut self, asset_path: &std::path::Path) -> Result<()> {
-		let mut sorted_paths = self.paths.clone();
-
-		// Sort by path for better namespace-grouped data layout.
-		// Prim paths before property paths, then property paths grouped by property name.
-		sorted_paths.sort_by(|a, b| {
-			let a_is_prop = a.is_prim_property_path();
-			let b_is_prop = b.is_prim_property_path();
-
-			if a_is_prop != b_is_prop {
-				return if a_is_prop {
-					std::cmp::Ordering::Greater
-				} else {
-					std::cmp::Ordering::Less
-				};
-			}
-
-			if a_is_prop && b_is_prop {
-				let an = a.name_token();
-				let bn = b.name_token();
-
-				if an != bn {
-					return an.cmp(&bn);
-				}
-			}
-
-			a.cmp(b)
-		});
-
-		// TODO: Implement the rest of the save function
-		Ok(())
-	}
-
 	fn write_sections(&mut self) -> Result<()> {
 		// TODO: Implement the write function
 
@@ -1427,12 +1350,7 @@ impl UsdcFile {
 		&self.fields[index.0 as usize]
 	}
 
-	fn add_spec(
-		&mut self,
-		path: &sdf::Path,
-		spec_type: sdf::SpecType,
-		fields: Vec<FieldValuePair>,
-	) {
+	fn add_spec(&mut self, path: &sdf::Path, spec_type: sdf::SpecType, fields: &[FieldValuePair]) {
 		// TODO: Support TimeSamples
 		// TODO: Support ts::Spline
 
@@ -1473,7 +1391,7 @@ impl UsdcFile {
 			.or_insert_with(|| {
 				let index = FieldSetIndex(self.field_sets.len() as u32);
 				self.field_sets.extend_from_slice(&field_indices);
-				self.field_sets.push(FieldIndex(0)); // Separator
+				self.field_sets.push(FieldIndex(Index::MAX)); // Separator
 				index
 			})
 	}
@@ -1696,14 +1614,6 @@ impl CrateIo for sdf::Relocate {
 	}
 }
 
-fn fields<'a>(usdc: &'a UsdcFile, spec: &Spec) -> impl Iterator<Item = &'a Field> + 'a {
-	usdc.field_sets
-		.iter()
-		.skip(spec.field_set_index.0 as usize)
-		.take_while(|&&x| x != FieldIndex(Index::MAX))
-		.map(|&x| usdc.get_field(x))
-}
-
 trait Float {
 	fn from(value: i32) -> Self;
 }
@@ -1723,5 +1633,162 @@ impl Float for f32 {
 impl Float for f64 {
 	fn from(value: i32) -> Self {
 		value as f64
+	}
+}
+
+fn fields<'a>(usdc: &'a UsdcFile, spec: &Spec) -> impl Iterator<Item = &'a Field> + 'a {
+	usdc.field_sets
+		.iter()
+		.skip(spec.field_set_index.0 as usize)
+		.take_while(|&&x| x != FieldIndex(Index::MAX))
+		.map(|&x| usdc.get_field(x))
+}
+
+struct SpecData {
+	fields: Vec<FieldValuePair>,
+	spec_type: sdf::SpecType,
+}
+
+pub struct Data {
+	data: HashMap<sdf::Path, SpecData>,
+	crate_data: Box<UsdcFile>,
+}
+
+impl Data {
+	fn open_internal(asset_path: &std::path::Path) -> Result<Self> {
+		let mut data = HashMap::new();
+		let crate_data = Box::new(UsdcFile::open(asset_path)?);
+		Ok(Self { data, crate_data })
+	}
+
+	fn save_internal(&mut self, asset_path: &std::path::Path) -> Result<()> {
+		let mut paths = self.data.keys().cloned().collect::<Vec<_>>();
+
+		// Sort by path for better namespace-grouped data layout.
+		// Prim paths before property paths, then property paths grouped by property name.
+		paths.sort_by(|a, b| {
+			let a_is_prop = a.is_prim_property_path();
+			let b_is_prop = b.is_prim_property_path();
+
+			if a_is_prop != b_is_prop {
+				return if a_is_prop {
+					std::cmp::Ordering::Greater
+				} else {
+					std::cmp::Ordering::Less
+				};
+			}
+
+			if a_is_prop && b_is_prop {
+				let an = a.name_token();
+				let bn = b.name_token();
+
+				if an != bn {
+					return an.cmp(&bn);
+				}
+			}
+
+			a.cmp(b)
+		});
+
+		// Pack all the specs.
+		// TODO: start_packing
+		self.crate_data.pack_ctx = PackCtx::new(&self.crate_data);
+		for path in paths {
+			let spec = &self.data[&path];
+			self.crate_data
+				.add_spec(&path, spec.spec_type, &spec.fields);
+		}
+		// TODO: if close
+		// populate_from_crate_file
+		self.crate_data.write_sections()?;
+
+		Ok(())
+	}
+
+	fn populate_from_crate_file(&mut self) {
+		self.data.clear();
+
+		// Remove structural data.
+		let specs = std::mem::take(&mut self.crate_data.specs);
+		let fields = std::mem::take(&mut self.crate_data.fields);
+		let field_sets = std::mem::take(&mut self.crate_data.field_sets);
+	}
+}
+
+impl sdf::FileFormat for Data {
+	fn open(path: &std::path::Path) -> Option<Self> {
+		Self::open_internal(path).ok()
+	}
+
+	fn save(&mut self, path: &std::path::Path) -> std::io::Result<()> {
+		self.save_internal(path)
+	}
+}
+
+impl sdf::AbstractData for Data {
+	fn create_spec(&mut self, path: &sdf::Path, spec_type: sdf::SpecType) {
+		todo!()
+	}
+
+	fn spec_type(&self, path: &sdf::Path) -> Option<sdf::SpecType> {
+		// TODO: self.data.get(path).map(|spec| spec.spec_type)
+
+		let path_index = PathIndex(self.crate_data.paths.iter().position(|p| *p == *path)? as u32);
+
+		self.crate_data
+			.specs
+			.iter()
+			.find(|s| s.path_index == path_index)
+			.map(|spec| spec.spec_type)
+	}
+
+	fn get(&self, path: &sdf::Path, field: &tf::Token) -> Option<vt::Value> {
+		let path_index = PathIndex(self.crate_data.paths.iter().position(|p| *p == *path)? as u32);
+
+		let spec = self
+			.crate_data
+			.specs
+			.iter()
+			.find(|s| s.path_index == path_index)?;
+
+		let field = fields(&self.crate_data, spec)
+			.find(|f| self.crate_data.get_token(f.token_index) == field)?;
+
+		unpack_value_rep(&self.crate_data, field.value_rep).unwrap()
+	}
+
+	fn set(&mut self, path: &sdf::Path, field: &tf::Token, value: &vt::Value) {
+		todo!()
+	}
+
+	fn list(&self, path: &sdf::Path) -> Vec<&tf::Token> {
+		let path_index = match self.crate_data.paths.iter().position(|p| *p == *path) {
+			Some(index) => PathIndex(index as u32),
+			None => return Vec::new(),
+		};
+
+		let spec = match self
+			.crate_data
+			.specs
+			.iter()
+			.find(|s| s.path_index == path_index)
+		{
+			Some(spec) => spec,
+			None => return Vec::new(),
+		};
+
+		fields(&self.crate_data, spec)
+			.map(|field| self.crate_data.get_token(field.token_index))
+			.collect()
+	}
+
+	fn visit_specs(&self) -> Vec<&sdf::Path> {
+		// TODO: self.data.keys().collect()
+
+		self.crate_data
+			.specs
+			.iter()
+			.map(|spec| self.crate_data.get_path(spec.path_index))
+			.collect()
 	}
 }

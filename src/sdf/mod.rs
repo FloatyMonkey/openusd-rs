@@ -1,6 +1,7 @@
 //! Scene Description Foundations
 
 mod abstract_data;
+mod file_format;
 mod list_op;
 mod path;
 mod path_node;
@@ -8,6 +9,7 @@ mod path_parser;
 mod schema;
 
 pub use abstract_data::*;
+pub use file_format::*;
 pub use list_op::*;
 pub use path::*;
 pub use schema::{CHILDREN_KEYS, FIELD_KEYS};

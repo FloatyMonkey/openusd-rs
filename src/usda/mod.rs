@@ -27,7 +27,22 @@ pub struct UsdaFile {
 	pub data: HashMap<sdf::Path, Spec>,
 }
 
+impl sdf::FileFormat for UsdaFile {
+	fn open(path: &std::path::Path) -> Option<Self> {
+		let content = std::fs::read_to_string(path).ok()?;
+		parser::parse(&content).ok()
+	}
+
+	fn save(&mut self, _path: &std::path::Path) -> std::io::Result<()> {
+		unimplemented!();
+	}
+}
+
 impl sdf::AbstractData for UsdaFile {
+	fn create_spec(&mut self, _path: &sdf::Path, _spec_type: sdf::SpecType) {
+		todo!()
+	}
+
 	fn spec_type(&self, path: &sdf::Path) -> Option<sdf::SpecType> {
 		self.data.get(path).map(|spec| spec.ty)
 	}
@@ -35,6 +50,10 @@ impl sdf::AbstractData for UsdaFile {
 	fn get(&self, path: &sdf::Path, field: &tf::Token) -> Option<vt::Value> {
 		let spec = self.data.get(path)?;
 		spec.fields.get(field).cloned()
+	}
+
+	fn set(&mut self, _path: &sdf::Path, _field: &tf::Token, _value: &vt::Value) {
+		todo!()
 	}
 
 	fn list(&self, path: &sdf::Path) -> Vec<&tf::Token> {

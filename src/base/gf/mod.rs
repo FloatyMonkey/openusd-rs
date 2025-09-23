@@ -173,3 +173,29 @@ pub struct Transform3d {
 	pub rotation: Quatd,
 	pub scale: Vec3d,
 }
+
+impl From<Matrix4d> for Transform3d {
+	fn from(matrix: Matrix4d) -> Self {
+		let glam_matrix = glam::DMat4::from_cols_array_2d(&matrix.data).transpose();
+		let (scale, rotation, translation) = glam_matrix.to_scale_rotation_translation();
+
+		Transform3d {
+			translation: Vec3d {
+				x: translation.x,
+				y: translation.y,
+				z: translation.z,
+			},
+			rotation: Quatd {
+				i: rotation.x,
+				j: rotation.y,
+				k: rotation.z,
+				w: rotation.w,
+			},
+			scale: Vec3d {
+				x: scale.x,
+				y: scale.y,
+				z: scale.z,
+			},
+		}
+	}
+}

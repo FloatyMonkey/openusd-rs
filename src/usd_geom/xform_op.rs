@@ -169,8 +169,8 @@ impl XformOp {
 		})
 	}
 
-	pub fn get_local_transform(prim: &usd::Prim) -> Option<gf::Transform3d> {
-		let mut matrix = DMat4::IDENTITY;
+	pub fn get_local_matrix(prim: &usd::Prim) -> Option<gf::Matrix4d> {
+		let mut transform = DMat4::IDENTITY;
 
 		if !prim.has_attribute(&TOKENS.xform_op_order) {
 			return None;
@@ -181,33 +181,25 @@ impl XformOp {
 			.get::<vt::Array<tf::Token>>();
 
 		for op in op_order.iter().rev() {
-			let op_type =
-				XformOpType::try_from(op.as_str().trim_start_matches("xformOp:")).unwrap();
-			if let Some(op_value) = prim.attribute(&op).get_value() {
-				if let Some(mat) = Self::get_op_transform(op_type, op_value, false) {
-					matrix *= mat;
-				}
+			let (op, is_inverse) = op
+				.as_str()
+				.strip_prefix("!invert!")
+				.map_or((op.as_str(), false), |s| (s, true));
+
+			if let Some(op_type) = XformOpType::try_from(op.trim_start_matches("xformOp:")).ok()
+				&& let Some(op_value) = prim.attribute(&tf::Token::new(op)).get_value()
+				&& let Some(op_transform) = Self::get_op_transform(op_type, op_value, is_inverse)
+			{
+				transform *= op_transform;
 			}
 		}
 
-		let transform = matrix.to_scale_rotation_translation();
-		Some(gf::Transform3d {
-			translation: gf::Vec3d {
-				x: transform.2.x,
-				y: transform.2.y,
-				z: transform.2.z,
-			},
-			rotation: gf::Quatd {
-				i: transform.1.x,
-				j: transform.1.y,
-				k: transform.1.z,
-				w: transform.1.w,
-			},
-			scale: gf::Vec3d {
-				x: transform.0.x,
-				y: transform.0.y,
-				z: transform.0.z,
-			},
+		Some(gf::Matrix4d {
+			data: transform.transpose().to_cols_array_2d(),
 		})
+	}
+
+	pub fn get_local_transform(prim: &usd::Prim) -> Option<gf::Transform3d> {
+		Self::get_local_matrix(prim).map(|m| m.into())
 	}
 }

@@ -169,9 +169,7 @@ impl XformOp {
 		})
 	}
 
-	pub fn get_local_transform(prim: &usd::Prim) -> Option<gf::Transform3d> {
-		let mut matrix = DMat4::IDENTITY;
-
+	fn compose_matrix(prim: &usd::Prim) -> Option<DMat4> {
 		if !prim.has_attribute(&TOKENS.xform_op_order) {
 			return None;
 		}
@@ -180,16 +178,53 @@ impl XformOp {
 			.attribute(&TOKENS.xform_op_order)
 			.get::<vt::Array<tf::Token>>();
 
+		let mut matrix = DMat4::IDENTITY;
+
 		for op in op_order.iter().rev() {
-			let op_type =
-				XformOpType::try_from(op.as_str().trim_start_matches("xformOp:")).unwrap();
-			if let Some(op_value) = prim.attribute(&op).get_value() {
-				if let Some(mat) = Self::get_op_transform(op_type, op_value, false) {
+			let token_str = op.as_str();
+			let (token_str, is_inverse) = if let Some(stripped) = token_str.strip_prefix("!invert!")
+			{
+				(stripped, true)
+			} else {
+				(token_str, false)
+			};
+
+			let op_keyword = token_str.trim_start_matches("xformOp:");
+			let op_keyword = op_keyword.split(":").next().unwrap_or(op_keyword);
+			let Ok(op_type) = XformOpType::try_from(op_keyword) else {
+				continue;
+			};
+
+			let attr_token = tf::Token::new(token_str.to_owned());
+			if !prim.has_attribute(&attr_token) {
+				continue;
+			}
+
+			let attr = prim.attribute(&attr_token);
+			if let Some(op_value) = attr.get_value() {
+				if let Some(mat) = Self::get_op_transform(op_type, op_value, is_inverse) {
 					matrix *= mat;
 				}
 			}
 		}
 
+		Some(matrix)
+	}
+
+	pub fn get_local_transform_matrix(prim: &usd::Prim) -> Option<gf::Matrix4d> {
+		let matrix = Self::compose_matrix(prim)?;
+		let cols = matrix.to_cols_array_2d();
+		let mut data = [[0.0f64; 4]; 4];
+		for row in 0..4 {
+			for col in 0..4 {
+				data[row][col] = cols[col][row];
+			}
+		}
+		Some(gf::Matrix4d::from_array(data))
+	}
+
+	pub fn get_local_transform(prim: &usd::Prim) -> Option<gf::Transform3d> {
+		let matrix = Self::compose_matrix(prim)?;
 		let transform = matrix.to_scale_rotation_translation();
 		Some(gf::Transform3d {
 			translation: gf::Vec3d {

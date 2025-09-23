@@ -557,6 +557,26 @@ fn read_int_array<T: Clone + IntMapper>(
 	Ok(read_compressed_ints(cursor, count)?.into())
 }
 
+fn read_bool_array(cursor: &mut Cursor<&[u8]>, rep: ValueRep) -> Result<vt::Array<bool>> {
+	let count = cursor.read_as::<u64>()? as usize;
+
+	if count == 0 {
+		return Ok(Vec::<bool>::new().into());
+	}
+
+	if !rep.is_compressed() || count < MIN_COMPRESSED_ARRAY_SIZE {
+		let mut values = Vec::with_capacity(count);
+		for _ in 0..count {
+			values.push(cursor.read_as::<u8>()? != 0);
+		}
+		return Ok(values.into());
+	}
+
+	let ints = read_compressed_ints::<i32>(cursor, count)?;
+	let values: Vec<bool> = ints.into_iter().map(|v| v != 0).collect();
+	Ok(values.into())
+}
+
 fn read_float_array<T: Clone + Float>(
 	cursor: &mut Cursor<&[u8]>,
 	rep: ValueRep,
@@ -755,6 +775,15 @@ fn unpack_value_rep(file: &UsdcFile, value: ValueRep) -> Result<Option<vt::Value
 	cursor.set_position(value.payload());
 
 	Ok(Some(match value.ty() {
+		Type::Bool if value.is_array() => read_bool_array(&mut cursor, value)?.into(),
+		Type::Bool if value.is_inlined() => (value.payload() != 0).into(),
+		// Some scalar bool specs encode the value directly in the payload bits.
+		Type::Bool if value.payload() < file.payload_start => (value.payload() != 0).into(),
+		Type::Bool => {
+			let val = cursor.read_as::<u8>()? != 0;
+			val.into()
+		}
+
 		Type::Half if value.is_array() => read_float_array::<f16>(&mut cursor, value)?.into(),
 		Type::Float if value.is_array() => read_float_array::<f32>(&mut cursor, value)?.into(),
 		Type::Double if value.is_array() => read_float_array::<f64>(&mut cursor, value)?.into(),
@@ -777,6 +806,10 @@ fn unpack_value_rep(file: &UsdcFile, value: ValueRep) -> Result<Option<vt::Value
 		Type::UInt if value.is_array() => read_int_array::<u32>(&mut cursor, value)?.into(),
 
 		Type::Vec3f if value.is_array() => read_pod_vec::<gf::Vec3f>(&mut cursor)?.into(),
+
+		Type::Quath if value.is_array() => read_pod_vec::<gf::Quath>(&mut cursor)?.into(),
+		Type::Quatf if value.is_array() => read_pod_vec::<gf::Quatf>(&mut cursor)?.into(),
+		Type::Quatd if value.is_array() => read_pod_vec::<gf::Quatd>(&mut cursor)?.into(),
 
 		Type::Quath => read_pod::<gf::Quath>(&mut cursor)?.into(),
 		Type::Quatf => read_pod::<gf::Quatf>(&mut cursor)?.into(),
@@ -899,6 +932,7 @@ impl sdf::AbstractData for UsdcFile {
 pub struct UsdcFile {
 	version: Version,
 	buffer: Vec<u8>,
+	payload_start: u64,
 
 	specs: Vec<Spec>,
 	fields: Vec<Field>,
@@ -1054,6 +1088,7 @@ impl UsdcFile {
 		assert!(version >= Version::new(0, 8, 0) && version <= Version::new(0, 12, 0));
 
 		let toc = read_toc(&mut cursor)?;
+		let payload_start = toc.minimum_section_start();
 
 		let tokens = read_tokens(&mut cursor, toc.section(Section::TOKENS).unwrap())?;
 		let strings = read_strings(&mut cursor, toc.section(Section::STRINGS).unwrap())?;
@@ -1065,6 +1100,7 @@ impl UsdcFile {
 		Ok(UsdcFile {
 			version,
 			buffer,
+			payload_start,
 			tokens,
 			strings,
 			fields,

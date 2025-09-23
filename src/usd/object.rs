@@ -32,6 +32,9 @@ impl<'a> Object<'a> {
 	pub fn path(&self) -> &sdf::Path {
 		&self.path
 	}
+	pub fn is_valid(&self) -> bool {
+		self.spec_type().is_some()
+	}
 
 	pub fn metadata<T: ValueType>(&self, key: &tf::Token) -> Option<T> {
 		self.stage()
@@ -58,5 +61,14 @@ impl<'a> Object<'a> {
 	#[doc(hidden)]
 	pub fn spec_type(&self) -> Option<sdf::SpecType> {
 		self.stage().data().spec_type(self.path())
+	}
+}
+
+impl<'a> Clone for Object<'a> {
+	fn clone(&self) -> Self {
+		Self {
+			stage: self.stage,       // reference, just copy
+			path: self.path.clone(), // deep clone of the path
+		}
 	}
 }

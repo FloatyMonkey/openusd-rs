@@ -33,6 +33,16 @@ impl<'a> Attribute<'a> {
 		self.metadata(&sdf::FIELD_KEYS.type_name)
 			.unwrap_or_default()
 	}
+	/// Return the attribute/property name (e.g. "points", "normals", "doubleSided").
+	pub fn name(&self) -> String {
+		let s = self.path().to_string();
+		if let Some(idx) = s.rfind('.') {
+			s[idx + 1..].to_string()
+		} else {
+			// if it's a property but somehow no dot, just return the last token after '/'
+			s.rsplit('/').next().unwrap_or(&s).to_string()
+		}
+	}
 }
 
 impl<'a> std::ops::Deref for Attribute<'a> {

@@ -32,10 +32,7 @@ impl<'a> Prim<'a> {
 	pub fn property<'b>(&'b self, name: &tf::Token) -> Property<'b> {
 		Property::new(self.stage(), self.path().append_property(name))
 	}
-}
 
-/// Attributes
-impl<'a> Prim<'a> {
 	/// Return a [`usd::Attribute`] with the given `name`.
 	pub fn attribute<'b>(&'b self, name: &tf::Token) -> Attribute<'b> {
 		Attribute::new(self.stage(), self.path().append_property(name))
@@ -46,6 +43,27 @@ impl<'a> Prim<'a> {
 			.data()
 			.get(&self.path().append_property(name), &sdf::FIELD_KEYS.default)
 			.is_some()
+	}
+	pub fn has_property(&self, name: &str) -> bool {
+		self.properties().iter().any(|p| p.name() == name)
+	}
+
+	/// Return all authored properties (USD attributes) on this prim.
+	pub fn properties(&self) -> Vec<usd::Attribute<'_>> {
+		let mut out = Vec::new();
+		let data = self.stage().data();
+
+		let props_tok = tf::Token::new("properties");
+		if let Some(val) = data.get(self.path(), &props_tok) {
+			// In USD, "properties" is an array of token names
+			if let Some(arr) = val.get::<vt::Array<tf::Token>>() {
+				for tok in arr.iter() {
+					out.push(self.attribute(tok));
+				}
+			}
+		}
+
+		out
 	}
 }
 

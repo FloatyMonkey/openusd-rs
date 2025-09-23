@@ -47,6 +47,17 @@ impl<'a> Prim<'a> {
 			.get(&self.path().append_property(name), &sdf::FIELD_KEYS.default)
 			.is_some()
 	}
+
+	pub fn attributes(&self) -> Vec<usd::Attribute<'_>> {
+		let mut out = Vec::new();
+		let data = self.stage().data();
+
+		for field in data.list(self.path()) {
+			out.push(self.attribute(field));
+		}
+
+		out
+	}
 }
 
 /// Relationships

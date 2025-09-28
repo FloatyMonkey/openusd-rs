@@ -6,6 +6,8 @@ pub mod usd;
 
 pub mod usd_geom;
 pub mod usd_lux;
+pub mod usd_mtlx;
+pub mod usd_shade;
 pub mod usd_skel;
 
 mod usda;

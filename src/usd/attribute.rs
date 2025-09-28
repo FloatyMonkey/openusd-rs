@@ -45,6 +45,11 @@ impl<'a> Attribute<'a> {
 	}
 }
 
+impl<'a> Clone for Attribute<'a> {
+	fn clone(&self) -> Self {
+		Attribute(self.0.clone())
+	}
+}
 impl<'a> std::ops::Deref for Attribute<'a> {
 	type Target = Property<'a>;
 	fn deref(&self) -> &Self::Target {

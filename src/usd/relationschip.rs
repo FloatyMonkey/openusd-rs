@@ -21,6 +21,11 @@ impl<'a> Relationship<'a> {
 	}
 }
 
+impl<'a> Clone for Relationship<'a> {
+	fn clone(&self) -> Self {
+		Relationship(self.0.clone())
+	}
+}
 impl<'a> std::ops::Deref for Relationship<'a> {
 	type Target = Property<'a>;
 	fn deref(&self) -> &Self::Target {

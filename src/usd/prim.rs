@@ -82,6 +82,11 @@ impl<'a> std::ops::Deref for Prim<'a> {
 	}
 }
 
+impl<'a> Clone for Prim<'a> {
+	fn clone(&self) -> Self {
+		Prim(self.0.clone())
+	}
+}
 pub struct ChildrenIter<'a> {
 	stage: &'a usd::Stage,
 	base_path: sdf::Path,

@@ -2,7 +2,7 @@ use super::path_node::*;
 use crate::tf;
 
 /// A path value used to locate objects in layers or scenegraphs.
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Path {
 	pub(super) prim: PoolHandle,
 	pub(super) prop: PoolHandle,
@@ -57,6 +57,162 @@ impl Path {
 			} || *self == Self::reflexive_relative_path())
 	}
 
+	/// Returns whether the path identifies a property.
+	///
+	/// A relational attribute is considered to be a property,
+	/// so this method will return true for relational attributes as well as properties of prims.
+	pub fn is_property_path(&self) -> bool {
+		self.prop != INVALID_NODE_HANDLE && {
+			let prop_pool = PATH_PROP_PART_POOL.read().unwrap();
+			let prop_node = prop_pool.get(self.prop).unwrap();
+			matches!(
+				prop_node.data,
+				PathNodeData::PrimProperty { .. } | PathNodeData::RelationalAttribute { .. }
+			)
+		}
+	}
+
+	/// Returns whether the path identifies a prim's property.
+	///
+	/// A relational attribute is not a prim property.
+	pub fn is_prim_property_path(&self) -> bool {
+		self.prop != INVALID_NODE_HANDLE && {
+			let prop_pool = PATH_PROP_PART_POOL.read().unwrap();
+			let prop_node = prop_pool.get(self.prop).unwrap();
+			matches!(prop_node.data, PathNodeData::PrimProperty { .. })
+		}
+	}
+
+	/// Returns whether the path or any of its parent paths identifies a variant selection for a prim.
+	pub fn contains_prim_variant_selection(&self) -> bool {
+		let prim_pool = PATH_PRIM_PART_POOL.read().unwrap();
+		prim_pool
+			.get(self.prim)
+			.map_or(false, |node| node.contains_prim_variant_selection())
+	}
+
+	/// Returns whether this path is or has a prefix that's a target path or a mapper path.
+	pub fn contains_target_path(&self) -> bool {
+		let prop_pool = PATH_PROP_PART_POOL.read().unwrap();
+		prop_pool
+			.get(self.prop)
+			.map_or(false, |node| node.contains_target_path())
+	}
+
+	/// Returns whether the path identifies a relationship or connection target.
+	pub fn is_target_path(&self) -> bool {
+		self.prop != INVALID_NODE_HANDLE && {
+			let prop_pool = PATH_PROP_PART_POOL.read().unwrap();
+			let prop_node = prop_pool.get(self.prop).unwrap();
+			matches!(prop_node.data, PathNodeData::Target { .. })
+		}
+	}
+
+	/// Return whether this path and `prefix` are not the empty path and this path has `prefix` as a prefix.
+	pub fn has_prefix(&self, prefix: &Self) -> bool {
+		if self.is_empty() || prefix.is_empty() {
+			return false;
+		}
+
+		if prefix.prop != INVALID_NODE_HANDLE {
+			// The prefix is a property-like path, in order for it to be a prefix of
+			// this path, we must also have a property part, and our prim part must
+			// be the same as the prefix's prim part.
+			if self.prim != prefix.prim || self.prop == INVALID_NODE_HANDLE {
+				return false;
+			}
+
+			// Now walk up property parts until we hit prefix.prop or we recurse above its depth.
+			let prop_pool = PATH_PROP_PART_POOL.read().unwrap();
+			let mut prop_node = prop_pool.get(self.prop);
+			let prefix_prop_node = prop_pool.get(prefix.prop);
+
+			while prop_node.is_some() && prop_node != prefix_prop_node {
+				prop_node = prop_pool.get(prop_node.unwrap().parent);
+			}
+
+			prop_node == prefix_prop_node
+		} else {
+			// The prefix is a prim-like path. Walk up nodes until we achieve the
+			// same depth as the prefix, then just check for equality.
+
+			let prim_pool = PATH_PRIM_PART_POOL.read().unwrap();
+			let mut prim_node = prim_pool.get(self.prim).unwrap();
+
+			if prim_node.is_absolute_path() && prefix.is_absolute_root() {
+				return true;
+			}
+
+			let prefix_prim_node = prim_pool.get(prefix.prim).unwrap();
+
+			let prefix_depth = prefix_prim_node.element_count();
+			let mut cur_depth = prim_node.element_count();
+
+			if cur_depth < prefix_depth {
+				return false;
+			}
+
+			while cur_depth > prefix_depth {
+				prim_node = prim_pool.get(prim_node.parent).unwrap();
+				cur_depth -= 1;
+			}
+
+			prim_node == prefix_prim_node
+		}
+	}
+
+	/// Return a range for iterating over the ancestors of this path.
+	///
+	/// The range provides iteration over the prefixes of a path, ordered from longest to shortest.
+	/// Starting with the path itself and ending with a single element path, not including the empty/root path.
+	pub fn ancestors_range(&self) -> PathAncestorsRange {
+		PathAncestorsRange { path: self.clone() }
+	}
+
+	/// Returns the name of the prim, property or relational attribute identified by the path.
+	pub fn name_token(&self) -> tf::Token {
+		if self.prop != INVALID_NODE_HANDLE {
+			let prop_pool = PATH_PROP_PART_POOL.read().unwrap();
+			let prop_node = prop_pool.get(self.prop).unwrap();
+			return prop_node.name().clone();
+		}
+
+		if self.prim != INVALID_NODE_HANDLE {
+			let prim_pool = PATH_PRIM_PART_POOL.read().unwrap();
+			let prim_node = prim_pool.get(self.prim).unwrap();
+			return prim_node.name().clone();
+		}
+
+		tf::Token::empty()
+	}
+
+	/// Returns a string representation of the "terminal" element of this path.
+	///
+	/// Empty, absolute root and reflexive relative paths are *not* considered elements
+	/// (one of the defining properties of elements is that they have a parent),
+	/// so this function will return an empty token for these paths.
+	///
+	/// Unlike [`Self::name_token`], which provides you "some" information about the terminal element,
+	/// this provides a complete representation of the element, for all element types.
+	pub fn element_token(&self) -> tf::Token {
+		if self.prop != INVALID_NODE_HANDLE {
+			let prop_pool = PATH_PROP_PART_POOL.read().unwrap();
+			let prop_node = prop_pool.get(self.prop).unwrap();
+			return prop_node.element().clone();
+		}
+
+		if self.prim != INVALID_NODE_HANDLE {
+			let prim_pool = PATH_PRIM_PART_POOL.read().unwrap();
+			let prim_node = prim_pool.get(self.prim).unwrap();
+			return prim_node.element().clone();
+		}
+
+		tf::Token::empty()
+	}
+}
+
+/// Creating new paths by modifying existing paths.
+impl Path {
 	/// Return the path that identifies this path's namespace parent.
 	///
 	/// Note that the parent path of a relative parent path (`..`) is a relative grandparent path (`../..`).
@@ -114,34 +270,30 @@ impl Path {
 		}
 	}
 
-	/// Return a range for iterating over the ancestors of this path.
+	/// Creates a path by stripping all relational attributes, targets,
+	/// properties, and variant selections from the leafmost prim path,
+	/// leaving the nearest path for which [`Self::is_prim_path`] returns true.
 	///
-	/// The range provides iteration over the prefixes of a path, ordered from longest to shortest.
-	/// Starting with the path itself and ending with a single element path, not including the empty/root path.
-	pub fn ancestors_range(&self) -> PathAncestorsRange {
-		PathAncestorsRange { path: self.clone() }
-	}
+	/// If the path is already a prim path, the same path is returned.
+	pub fn prim_path(&self) -> Self {
+		let prim_pool = PATH_PRIM_PART_POOL.read().unwrap();
+		let mut prim_node = prim_pool.get(self.prim);
+		let mut prim_handle = self.prim;
 
-	/// Returns the name of the prim, property or relational attribute identified by the path.
-	pub fn name(&self) -> String {
-		if self.prop != INVALID_NODE_HANDLE {
-			let prop_pool = PATH_PROP_PART_POOL.read().unwrap();
-			let prop_node = prop_pool.get(self.prop).unwrap();
-			return prop_node.name().to_string();
+		while let Some(node) = prim_node {
+			if matches!(node.data, PathNodeData::Prim { .. }) {
+				break;
+			}
+			prim_node = prim_pool.get(node.parent);
+			prim_handle = node.parent;
 		}
 
-		if self.prim != INVALID_NODE_HANDLE {
-			let prim_pool = PATH_PRIM_PART_POOL.read().unwrap();
-			let prim_node = prim_pool.get(self.prim).unwrap();
-			return prim_node.name().to_string();
+		Self {
+			prim: prim_handle,
+			prop: INVALID_NODE_HANDLE,
 		}
-
-		String::new()
 	}
-}
 
-/// Creating new paths by modifying existing paths.
-impl Path {
 	/// Creates a path by appending an element for `child_name` to this path.
 	///
 	/// This path must be a prim path, the AbsoluteRootPath or the ReflexiveRelativePath.
@@ -372,13 +524,42 @@ mod tests {
 	}
 
 	#[test]
+	fn has_prefix() {
+		let path = p("/foo/bar/baz.prop");
+
+		assert!(!Path::empty_path().has_prefix(&path));
+		assert!(!path.has_prefix(&Path::empty_path()));
+
+		assert!(path.has_prefix(&p("/foo/bar/baz.prop")));
+		assert!(path.has_prefix(&p("/foo/bar/baz")));
+		assert!(path.has_prefix(&p("/foo/bar")));
+		assert!(path.has_prefix(&p("/foo")));
+
+		assert!(!path.has_prefix(&p("/bar/baz")));
+		assert!(!path.has_prefix(&p("/bar")));
+	}
+
+	#[test]
 	fn parent_path() {
+		assert_eq!(Path::empty_path().parent_path(), Path::empty_path());
 		assert_eq!(p("/foo").parent_path(), Path::absolute_root_path());
 		assert_eq!(p("/foo/bar").parent_path(), p("/foo"));
 		assert_eq!(p("foo/bar").parent_path(), p("foo"));
 		assert_eq!(p("/foo.prop").parent_path(), p("/foo"));
 		assert_eq!(p("foo.prop").parent_path(), p("foo"));
 		assert_eq!(p("/foo.prop:bar").parent_path(), p("/foo"));
+	}
+
+	#[test]
+	fn prim_path() {
+		assert_eq!(Path::empty_path().prim_path(), Path::empty_path());
+		assert_eq!(p("/foo").prim_path(), p("/foo"));
+		assert_eq!(p("/foo/bar").prim_path(), p("/foo/bar"));
+		assert_eq!(p("/foo.prop").prim_path(), p("/foo"));
+		assert_eq!(p("/foo.prop:bar").prim_path(), p("/foo"));
+		assert_eq!(p("/foo{set=sel}").prim_path(), p("/foo"));
+		assert_eq!(p("/foo{set=sel}.prop").prim_path(), p("/foo"));
+		assert_eq!(p("/foo{set=sel}.prop:bar").prim_path(), p("/foo"));
 	}
 
 	#[test]
@@ -397,6 +578,17 @@ mod tests {
 		assert_eq!(ancestors.next(), Some(p("/foo/bar")));
 		assert_eq!(ancestors.next(), Some(p("/foo")));
 		assert_eq!(ancestors.next(), None);
+	}
+
+	#[test]
+	fn element_token() {
+		assert!(Path::empty_path().element_token().is_empty());
+		assert!(Path::absolute_root_path().element_token().is_empty());
+		assert!(Path::reflexive_relative_path().element_token().is_empty());
+
+		assert_eq!(p("/foo").element_token(), t("foo"));
+		assert_eq!(p("/foo.prop").element_token(), t(".prop"));
+		assert_eq!(p("/foo{set=sel}").element_token(), t("{set=sel}"));
 	}
 
 	#[test]

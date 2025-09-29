@@ -1,3 +1,4 @@
+use super::Prim;
 use crate::{
 	sdf, tf, usd,
 	vt::{self, ValueType},
@@ -25,14 +26,27 @@ impl<'a> Object<'a> {
 		Object { stage, path }
 	}
 
+	/// Return the stage that owns the object, and to whose state and lifetime this object's validity is tied.
 	pub fn stage(&self) -> &usd::Stage {
 		self.stage
 	}
 
+	/// Return the full name of this object, i.e. the last component of its [`sdf::Path`] in namespace.
+	pub fn name(&self) -> tf::Token {
+		self.path.name_token()
+	}
+
+	/// Return the complete scene path to this object on its [`usd::Stage`].
 	pub fn path(&self) -> &sdf::Path {
 		&self.path
 	}
 
+	/// Return this object if it is a prim, otherwise return this object's nearest owning prim.
+	pub fn prim(&self) -> Prim<'_> {
+		Prim::new(self.stage(), self.path().prim_path())
+	}
+
+	/// Return the requested metadatum named `key`.
 	pub fn metadata<T: ValueType>(&self, key: &tf::Token) -> Option<T> {
 		self.stage()
 			.data()

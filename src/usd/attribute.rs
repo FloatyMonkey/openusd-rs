@@ -23,6 +23,14 @@ impl<'a> Attribute<'a> {
 			.unwrap()
 	}
 
+	pub fn try_get<T: ValueType>(&self) -> Option<T> {
+		self.stage()
+			.data()
+			.get(&self.path(), &sdf::FIELD_KEYS.default)
+			.map(|v| v.get::<T>())
+			.flatten()
+	}
+
 	pub fn get_value(&self) -> Option<vt::Value> {
 		self.stage()
 			.data()

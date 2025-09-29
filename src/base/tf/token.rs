@@ -1,5 +1,5 @@
 /// Token for efficient comparison, assignment, and hashing of known strings.
-#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Token {
 	data: String,
 }
@@ -8,6 +8,12 @@ impl Token {
 	pub fn new(name: impl ToString) -> Self {
 		Token {
 			data: name.to_string(),
+		}
+	}
+
+	pub fn empty() -> Self {
+		Token {
+			data: String::new(),
 		}
 	}
 

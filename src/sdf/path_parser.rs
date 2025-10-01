@@ -172,7 +172,7 @@ fn path<'a>(i: &mut In<'a>) -> PResult<()> {
 		.map_err(|_| Error::from_msg("No valid path alternative"))
 }
 
-pub fn parse_path<'a>(input: &'a str) -> PResult<sdf::Path> {
+pub fn parse_path(input: &str) -> PResult<sdf::Path> {
 	if input.is_empty() {
 		return Ok(sdf::Path::empty_path());
 	}

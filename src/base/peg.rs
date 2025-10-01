@@ -36,10 +36,6 @@ impl<'a, C> Input<'a, C> {
 	pub fn format_error(&self, error: &str) -> String {
 		self.get_error_context().format_error_display(error)
 	}
-
-	pub fn remaining(&self) -> &'a str {
-		&self.input[self.pos..]
-	}
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -122,6 +118,10 @@ impl Error {
 	pub fn fatal(mut self) -> Self {
 		self.global = true;
 		self
+	}
+
+	pub fn message(&self) -> &str {
+		&self.message
 	}
 }
 

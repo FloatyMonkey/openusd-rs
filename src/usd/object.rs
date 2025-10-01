@@ -51,8 +51,7 @@ impl<'a> Object<'a> {
 		self.stage()
 			.data()
 			.get(self.path(), key)
-			.map(|v| v.get::<T>())
-			.flatten()
+			.and_then(|v| v.get::<T>())
 	}
 
 	/// Return this object's documentation (metadata).

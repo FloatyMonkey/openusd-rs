@@ -31,7 +31,7 @@ impl Context {
 		self.data.insert(path, spec);
 	}
 
-	pub fn into_text_data(&self) -> UsdaFile {
+	pub fn text_data(&self) -> UsdaFile {
 		UsdaFile {
 			data: self.data.clone(),
 		}
@@ -176,10 +176,6 @@ fn inline_padding<'a>(i: &mut In<'a>) -> PResult<()> {
 	sor!(i, space, cpp_style_multi_line_comment)
 }
 
-fn single_line_padding<'a>(i: &mut In<'a>) -> PResult<()> {
-	sor!(i, space, comment)
-}
-
 fn multi_line_padding<'a>(i: &mut In<'a>) -> PResult<()> {
 	sor!(i, space, eol, comment)
 }
@@ -255,7 +251,7 @@ fn number<'a, C>(i: &mut Input<'a, C>) -> PResult<&'a str> {
 	let start_pos = i.pos;
 	opt(i, |i| one(i, '-'))?;
 	one_or_more(i, |i| match i.current_char() {
-		Some(c) if c.is_digit(10) => {
+		Some(c) if c.is_ascii_digit() => {
 			i.advance();
 			Ok(())
 		}
@@ -264,7 +260,7 @@ fn number<'a, C>(i: &mut Input<'a, C>) -> PResult<&'a str> {
 	opt(i, |i| {
 		one(i, '.')?;
 		one_or_more(i, |i| match i.current_char() {
-			Some(c) if c.is_digit(10) => {
+			Some(c) if c.is_ascii_digit() => {
 				i.advance();
 				Ok(())
 			}
@@ -366,16 +362,16 @@ fn parse_value<'a>(i: &mut In<'a>) -> PResult<vt::Value> {
 				.map(vt::Value::new)
 				.map_err(|_| Error::from_msg("Invalid number"))
 		}),
-		|i| lexeme(i, identifier).and_then(|id| match id {
-			"true" => Ok(vt::Value::new(true)),
-			"false" => Ok(vt::Value::new(false)),
-			_ => Ok(vt::Value::new(tf::Token::new(id))), // Treat as Token for now
+		|i| lexeme(i, identifier).map(|id| match id {
+			"true" => vt::Value::new(true),
+			"false" => vt::Value::new(false),
+			_ => vt::Value::new(tf::Token::new(id)), // Treat as Token for now
 		}),
-		|i| lexeme(i, path_ref).map(|path| vt::Value::new(path)),
-		|i| lexeme(i, asset_ref).map(|asset| vt::Value::new(asset)),
+		|i| lexeme(i, path_ref).map(vt::Value::new),
+		|i| lexeme(i, asset_ref).map(vt::Value::new),
 		|i| parse_tuple(i).map(|_| vt::Value::empty()),
 		|i| parse_array(i).map(|_| vt::Value::empty()),
-		|i| dictionary_value(i).map(|dict| vt::Value::new(dict)),
+		|i| dictionary_value(i).map(vt::Value::new),
 	)
 	.map_err(|_| Error::from_msg("Invalid value type"))
 }
@@ -536,11 +532,10 @@ fn prim_spec<'a>(i: &mut In<'a>) -> PResult<()> {
 	token_separator(i)?;
 
 	must(i, |i| {
-		let type_name =
-			opt(i, |i| terminated(i, identifier, token_separator))?.map(|s| tf::Token::new(s));
+		let type_name = opt(i, |i| terminated(i, identifier, token_separator))?.map(tf::Token::new);
 
 		let name = string_literal(i)
-			.map(|s| tf::Token::new(s))
+			.map(tf::Token::new)
 			.map_err(|_| Error::from_msg("Expected prim name"))?;
 
 		let metadata = pad_opt(i, parse_metadata, multi_line_padding)?;
@@ -580,14 +575,14 @@ fn prim_spec<'a>(i: &mut In<'a>) -> PResult<()> {
 		}
 
 		if let Some(meta) = metadata {
-			if let Some(inherits) = meta.get("inherits") {
-				if let Some(path) = inherits.get::<sdf::Path>() {
-					let mut inherit_paths = sdf::PathListOp::default();
-					inherit_paths.explicit_items.push(path.clone());
-					inherit_paths.is_explicit = true;
-					spec.add(&FIELD_KEYS.inherit_paths, inherit_paths.clone());
-					println!("Parsed inherits: {:?}", inherit_paths);
-				}
+			if let Some(inherits) = meta.get("inherits")
+				&& let Some(path) = inherits.get::<sdf::Path>()
+			{
+				let mut inherit_paths = sdf::PathListOp::default();
+				inherit_paths.explicit_items.push(path.clone());
+				inherit_paths.is_explicit = true;
+				spec.add(&FIELD_KEYS.inherit_paths, inherit_paths.clone());
+				println!("Parsed inherits: {:?}", inherit_paths);
 			}
 
 			if let Some(documentation) = meta.get("doc") {
@@ -630,7 +625,7 @@ pub fn layer_spec<'a>(i: &mut In<'a>) -> PResult<()> {
 	Ok(())
 }
 
-pub fn parse<'a>(input_str: &'a str) -> PResult<UsdaFile> {
+pub fn parse(input_str: &str) -> PResult<UsdaFile> {
 	let mut ctx = Context::new();
 	let mut input = Input::new(input_str, &mut ctx);
 
@@ -639,8 +634,7 @@ pub fn parse<'a>(input_str: &'a str) -> PResult<UsdaFile> {
 
 	let result = layer_spec(&mut input);
 	if let Err(error) = &result {
-		let error_str = format!("{:?}", error);
-		println!("{}", input.format_error(&error_str));
+		println!("{}", input.format_error(error.message()));
 		return Err(error.clone());
 	}
 
@@ -650,7 +644,7 @@ pub fn parse<'a>(input_str: &'a str) -> PResult<UsdaFile> {
 
 	input.ctx.add_spec(root_path, pseudo_root);
 
-	let text_data = input.ctx.into_text_data();
+	let text_data = input.ctx.text_data();
 
 	eoi(&mut input)?;
 

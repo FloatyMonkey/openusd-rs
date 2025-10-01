@@ -20,5 +20,7 @@ jobs:
       run: cargo test --all-features --all-targets
     - name: Check formatting
       run: cargo fmt --all -- --check
+    - name: clippy
+      run: cargo clippy --all-features --all-targets -- -D warnings
     - name: Build documentation
       run: cargo doc --no-deps

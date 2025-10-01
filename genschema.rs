@@ -36,59 +36,59 @@ fn parse_schema_file(path: &Path) -> io::Result<Vec<ClassDef>> {
 }
 
 fn process_prim(prim: &usd::Prim, class_defs: &mut Vec<ClassDef>) {
-	if let Some(specifier) = prim.specifier() {
-		if specifier == sdf::Specifier::Class {
-			let mut inherits = Vec::new();
+	if let Some(specifier) = prim.specifier()
+		&& specifier == sdf::Specifier::Class
+	{
+		let mut inherits = Vec::new();
 
-			if let Some(inherit_paths) =
-				prim.metadata::<sdf::PathListOp>(&sdf::FIELD_KEYS.inherit_paths)
-			{
-				for inherit_path in &inherit_paths.explicit_items {
-					inherits.push(inherit_path.name_token().to_string());
-				}
+		if let Some(inherit_paths) =
+			prim.metadata::<sdf::PathListOp>(&sdf::FIELD_KEYS.inherit_paths)
+		{
+			for inherit_path in &inherit_paths.explicit_items {
+				inherits.push(inherit_path.name_token().to_string());
 			}
-
-			if inherits.len() > 1 {
-				panic!("Multiple inheritance is not supported: {:?}", inherits);
-			}
-
-			if inherits.is_empty() {
-				inherits.push("usd::SchemaBase".to_string());
-			}
-
-			let mut properties = Vec::new();
-
-			if let Some(prop_names) =
-				prim.metadata::<vt::Array<tf::Token>>(&sdf::CHILDREN_KEYS.property_children)
-			{
-				for prop_name in &prop_names {
-					let prop = prim.property(&prop_name);
-
-					// TODO: apiName should be of type tf::Token but parser detects it as String for now
-					let api_name = prop
-						.custom_data()
-						.get("apiName")
-						.and_then(|v| v.get::<String>())
-						.unwrap_or_else(|| prop_name.to_string());
-
-					let is_relationship = prop.spec_type() == Some(sdf::SpecType::Relationship);
-
-					properties.push(PropertyDef {
-						name: prop_name.to_string(),
-						api_name,
-						documentation: prop.documentation(),
-						is_relationship,
-					});
-				}
-			}
-
-			class_defs.push(ClassDef {
-				name: prim.path().name_token().to_string(),
-				documentation: prim.documentation(),
-				inherit: inherits[0].clone(),
-				properties,
-			});
 		}
+
+		if inherits.len() > 1 {
+			panic!("Multiple inheritance is not supported: {:?}", inherits);
+		}
+
+		if inherits.is_empty() {
+			inherits.push("usd::SchemaBase".to_string());
+		}
+
+		let mut properties = Vec::new();
+
+		if let Some(prop_names) =
+			prim.metadata::<vt::Array<tf::Token>>(&sdf::CHILDREN_KEYS.property_children)
+		{
+			for prop_name in &prop_names {
+				let prop = prim.property(prop_name);
+
+				// TODO: apiName should be of type tf::Token but parser detects it as String for now
+				let api_name = prop
+					.custom_data()
+					.get("apiName")
+					.and_then(|v| v.get::<String>())
+					.unwrap_or_else(|| prop_name.to_string());
+
+				let is_relationship = prop.spec_type() == Some(sdf::SpecType::Relationship);
+
+				properties.push(PropertyDef {
+					name: prop_name.to_string(),
+					api_name,
+					documentation: prop.documentation(),
+					is_relationship,
+				});
+			}
+		}
+
+		class_defs.push(ClassDef {
+			name: prim.path().name_token().to_string(),
+			documentation: prim.documentation(),
+			inherit: inherits[0].clone(),
+			properties,
+		});
 	}
 
 	for child in prim.children() {
@@ -125,18 +125,52 @@ fn snakecase_from_camelcase(name: &str) -> String {
 	result.to_lowercase()
 }
 
-fn write_documentation(out: &mut String, doc: &str, indent: &str) {
-	if !doc.is_empty() {
-		// TODO: Iterator::intersperse (https://github.com/rust-lang/rust/issues/79524) would be nice here once stable.
-		let mut lines = doc.trim().lines().map(|line| line.trim_start());
-		if let Some(first) = lines.next() {
-			out.push_str(&format!("{}/// {}", indent, first));
-			for line in lines {
-				out.push_str(&format!("\n{}/// {}", indent, line));
-			}
-		}
-		out.push_str("\n");
+/// Removes common leading whitespace from a multi-line block of text.
+/// Preserves relative indentation in e.g. lists.
+fn unindent(input: &str) -> String {
+	let trimmed = input.trim_matches('\n');
+
+	let lines: Vec<&str> = trimmed.lines().collect();
+
+	if lines.is_empty() {
+		return String::new();
 	}
+
+	let first_line_has_indent = lines[0].chars().take_while(|c| c.is_whitespace()).count() > 0;
+
+	let indent_candidates = if first_line_has_indent {
+		&lines[..]
+	} else {
+		&lines[1..]
+	};
+
+	let min_indent = indent_candidates
+		.iter()
+		.filter(|line| !line.trim().is_empty())
+		.map(|line| line.chars().take_while(|c| c.is_whitespace()).count())
+		.min()
+		.unwrap_or(0);
+
+	let mut result = Vec::with_capacity(lines.len());
+	for (i, line) in lines.iter().enumerate() {
+		if i == 0 && !first_line_has_indent {
+			result.push((*line).to_string());
+		} else if line.len() >= min_indent {
+			result.push(line.chars().skip(min_indent).collect());
+		} else {
+			result.push((*line).to_string());
+		}
+	}
+
+	result.join("\n")
+}
+
+fn write_documentation(out: &mut String, doc: &str, indent: &str) {
+	out.extend(
+		unindent(doc)
+			.lines()
+			.map(|l| format!("{}/// {}\n", indent, l)),
+	);
 }
 
 fn generate_tokens(classes: &[ClassDef]) -> String {

@@ -88,7 +88,7 @@ impl Path {
 		let prim_pool = PATH_PRIM_PART_POOL.read().unwrap();
 		prim_pool
 			.get(self.prim)
-			.map_or(false, |node| node.contains_prim_variant_selection())
+			.is_some_and(|node| node.contains_prim_variant_selection())
 	}
 
 	/// Returns whether this path is or has a prefix that's a target path or a mapper path.
@@ -96,7 +96,7 @@ impl Path {
 		let prop_pool = PATH_PROP_PART_POOL.read().unwrap();
 		prop_pool
 			.get(self.prop)
-			.map_or(false, |node| node.contains_target_path())
+			.is_some_and(|node| node.contains_target_path())
 	}
 
 	/// Returns whether the path identifies a relationship or connection target.

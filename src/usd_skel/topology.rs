@@ -79,13 +79,11 @@ impl Topology {
 			.enumerate()
 			.map(|(j, p)| (j as i32, *p))
 		{
-			if parent >= 0 {
-				if parent >= joint {
-					if parent == joint {
-						return Err(TopologyError::SelfParent { joint });
-					}
-					return Err(TopologyError::MisorderedParent { joint, parent });
+			if parent >= 0 && parent >= joint {
+				if parent == joint {
+					return Err(TopologyError::SelfParent { joint });
 				}
+				return Err(TopologyError::MisorderedParent { joint, parent });
 			}
 		}
 		Ok(())

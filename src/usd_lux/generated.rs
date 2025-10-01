@@ -241,16 +241,16 @@ impl DomeLight<'_> {
 	/// Specifies the parameterization of the color map file.
 	/// Valid values are:
 	/// - automatic: Tries to determine the layout from the file itself.
-	/// For example, Renderman texture files embed an explicit
-	/// parameterization.
+	///   For example, Renderman texture files embed an explicit
+	///   parameterization.
 	/// - latlong: Latitude as X, longitude as Y.
 	/// - mirroredBall: An image of the environment reflected in a
-	/// sphere, using an implicitly orthogonal projection.
+	///   sphere, using an implicitly orthogonal projection.
 	/// - angular: Similar to mirroredBall but the radial dimension
-	/// is mapped linearly to the angle, providing better sampling
-	/// at the edges.
+	///   is mapped linearly to the angle, providing better sampling
+	///   at the edges.
 	/// - cubeMapVerticalCross: A cube map with faces laid out as a
-	/// vertical cross.
+	///   vertical cross.
 	pub fn texture_format_attr(&self) -> usd::Attribute<'_> {
 		self.prim().attribute(&TOKENS.inputs_texture_format)
 	}

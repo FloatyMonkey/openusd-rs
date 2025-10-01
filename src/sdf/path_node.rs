@@ -112,35 +112,35 @@ impl PathNode {
 			PathNodeData::Prim { name } => out.insert_str(0, name.as_str()),
 			PathNodeData::PrimProperty { name } => {
 				out.insert_str(0, name.as_str());
-				out.insert_str(0, ".");
+				out.insert(0, '.');
 			}
 			PathNodeData::PrimVariantSelection {
 				variant_set,
 				variant_name,
 			} => {
-				out.insert_str(0, "}");
+				out.insert(0, '}');
 				out.insert_str(0, variant_name.as_str());
-				out.insert_str(0, "=");
+				out.insert(0, '=');
 				out.insert_str(0, variant_set.as_str());
-				out.insert_str(0, "{");
+				out.insert(0, '{');
 			}
 			PathNodeData::Target { target_path } => {
-				out.insert_str(0, "]");
+				out.insert(0, ']');
 				Self::write_path_string(target_path.prim, target_path.prop, out);
-				out.insert_str(0, "[");
+				out.insert(0, '[');
 			}
 			PathNodeData::RelationalAttribute { name } => {
 				out.insert_str(0, name.as_str());
-				out.insert_str(0, ".");
+				out.insert(0, '.');
 			}
 			PathNodeData::Mapper { target_path } => {
-				out.insert_str(0, "]");
+				out.insert(0, ']');
 				Self::write_path_string(target_path.prim, target_path.prop, out);
 				out.insert_str(0, "mapper[");
 			}
 			PathNodeData::MapperArg { name } => {
 				out.insert_str(0, name.as_str());
-				out.insert_str(0, ".");
+				out.insert(0, '.');
 			}
 			PathNodeData::Expression => out.insert_str(0, ".expression"),
 		};
@@ -155,7 +155,7 @@ impl PathNode {
 		}
 
 		if prim_part == RELATIVE_ROOT_NODE_HANDLE && prop_part == INVALID_NODE_HANDLE {
-			out.insert_str(0, ".");
+			out.insert(0, '.');
 			return;
 		}
 
@@ -178,7 +178,7 @@ impl PathNode {
 				PathNodeData::Prim { name } => name.as_str() == "..",
 				_ => false,
 			} {
-			out.insert_str(0, "/");
+			out.insert(0, '/');
 		}
 
 		cur_node = prim_part;
@@ -190,14 +190,14 @@ impl PathNode {
 				&& parent.is_some()
 				&& matches!(&parent.unwrap().data, PathNodeData::Prim { .. })
 			{
-				out.insert_str(0, "/");
+				out.insert(0, '/');
 			}
 			cur_node = prim_node.parent;
 		}
 
 		// Add the leading '/' for absolute paths
 		if prim_pool.get(prim_part).unwrap().is_absolute_path() {
-			out.insert_str(0, "/");
+			out.insert(0, '/');
 		}
 	}
 
@@ -296,7 +296,7 @@ pub fn find_or_create_path_node(
 		}
 	}
 
-	let parent_node = parent.map(|p| w_pool.get(p)).flatten();
+	let parent_node = parent.and_then(|p| w_pool.get(p));
 
 	let node = PathNode {
 		parent: parent.unwrap_or(INVALID_NODE_HANDLE),
@@ -306,7 +306,5 @@ pub fn find_or_create_path_node(
 		data: data.clone(),
 	};
 
-	let new_handle = w_pool.insert(node);
-
-	new_handle
+	w_pool.insert(node)
 }

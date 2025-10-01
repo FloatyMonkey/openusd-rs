@@ -1,3 +1,6 @@
+// TODO: Remove once writing is implemented.
+#![allow(dead_code)]
+
 use super::integer_coding::*;
 use crate::io_ext::{ReadBytesExt, WriteBytesExt};
 use crate::{gf, sdf, tf, vt};
@@ -423,7 +426,7 @@ fn read_tokens(cursor: &mut Cursor<&[u8]>, section: &Section) -> Result<Vec<tf::
 	let tokens = buffer
 		.split(|c| *c == b'\0')
 		.map(|b| std::str::from_utf8(b).unwrap())
-		.map(|s| tf::Token::new(s))
+		.map(tf::Token::new)
 		.collect::<Vec<_>>();
 
 	if tokens.len() != token_count as usize {
@@ -914,7 +917,7 @@ trait CrateIo {
 	where
 		Self: Sized;
 
-	fn write(&self, file: &mut UsdcFile, cursor: &mut Cursor<&mut [u8]>) -> Result<()> {
+	fn write(&self, _file: &mut UsdcFile, _cursor: &mut Cursor<&mut [u8]>) -> Result<()> {
 		unimplemented!()
 	}
 }
@@ -929,7 +932,7 @@ fn read_contiguous<T: Clone>(cursor: &mut Cursor<&[u8]>, count: usize) -> Result
 }
 
 impl<T: Clone> CrateIo for Vec<T> {
-	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
+	fn read(_file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
 		let count = cursor.read_as::<u64>()? as usize;
 		read_contiguous(cursor, count)
 	}
@@ -955,11 +958,11 @@ fn write_typed_vec<T: CrateIo>(
 }
 
 impl<T: Copy + crate::io_ext::Readable + crate::io_ext::Writeable> CrateIo for T {
-	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
-		Ok(cursor.read_as::<T>()?)
+	fn read(_file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
+		cursor.read_as::<T>()
 	}
 
-	fn write(&self, file: &mut UsdcFile, cursor: &mut Cursor<&mut [u8]>) -> Result<()> {
+	fn write(&self, _file: &mut UsdcFile, cursor: &mut Cursor<&mut [u8]>) -> Result<()> {
 		cursor.write_as(*self)
 	}
 }
@@ -1112,7 +1115,7 @@ impl CrateIo for sdf::Path {
 }
 
 impl CrateIo for sdf::LayerOffset {
-	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
+	fn read(_file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
 		Ok(Self {
 			offset: cursor.read_as::<f64>()?,
 			scale: cursor.read_as::<f64>()?,
@@ -1125,13 +1128,13 @@ thread_local! {
 }
 
 impl CrateIo for vt::Value {
-	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
+	fn read(_file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
 		let offset = cursor.read_as::<i64>()?;
 		cursor.seek_relative(offset - 8)?;
 
-		let value_rep = ValueRep(cursor.read_as::<u64>()?);
+		/*let value_rep = ValueRep(cursor.read_as::<u64>()?);
 
-		/*let mut recursion_guard = LOCAL_UNPACK_RECURSION_GUARD.with(|guard| guard.borrow_mut());
+		let mut recursion_guard = LOCAL_UNPACK_RECURSION_GUARD.with(|guard| guard.borrow_mut());
 
 		if recursion_guard.insert(value_rep.0) {
 			// TODO: Read value

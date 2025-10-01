@@ -7,7 +7,7 @@ pub fn get_encoded_buffer_size<T>(count: usize) -> usize {
 		0
 	} else {
 		// common_value + num_codes_bytes + max_int_bytes
-		size_of::<T>() + ((count * 2 + 7) / 8) + (count * size_of::<T>())
+		size_of::<T>() + (count * 2).div_ceil(8) + (count * size_of::<T>())
 	}
 }
 
@@ -30,7 +30,7 @@ impl IntMapper for u32 {
 
 pub fn decode_integers<T: IntMapper>(buffer: &[u8], count: usize) -> std::io::Result<Vec<T>> {
 	let common_value = i32::from_le_bytes(buffer[0..4].try_into().unwrap());
-	let num_codes_bytes = (count * 2 + 7) / 8;
+	let num_codes_bytes = (count * 2).div_ceil(8);
 
 	let codes_in = &buffer[4..4 + num_codes_bytes];
 	let vints_in = &buffer[4 + num_codes_bytes..];

@@ -15,8 +15,7 @@ impl<'a> Prim<'a> {
 		self.stage()
 			.data()
 			.get(self.path(), &sdf::FIELD_KEYS.specifier)
-			.map(|v| v.get::<sdf::Specifier>())
-			.flatten()
+			.and_then(|v| v.get::<sdf::Specifier>())
 	}
 
 	pub fn children<'b>(&'b self) -> ChildrenIter<'b> {
@@ -78,9 +77,8 @@ impl<'a> ChildrenIter<'a> {
 			base_path: path.clone(),
 			prim_children: stage
 				.data()
-				.get(&path, &sdf::CHILDREN_KEYS.prim_children)
-				.map(|v| v.get::<vt::Array<tf::Token>>())
-				.flatten()
+				.get(path, &sdf::CHILDREN_KEYS.prim_children)
+				.and_then(|v| v.get::<vt::Array<tf::Token>>())
 				.unwrap_or_default(),
 			index: 0,
 		}

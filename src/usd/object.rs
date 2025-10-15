@@ -54,6 +54,15 @@ impl<'a> Object<'a> {
 			.and_then(|v| v.get::<T>())
 	}
 
+	/// Determines whether this object is valid.
+	///
+	/// A valid object is one that identifies a spec in the stage’s layer stack.
+	/// Invalid objects typically result from unresolved paths or deleted scene
+	/// elements.
+	pub fn is_valid(&self) -> bool {
+		self.spec_type().is_some()
+	}
+
 	/// Return this object's documentation (metadata).
 	///
 	/// This returns the empty string if no documentation has been set.

@@ -100,3 +100,16 @@ pub struct AssetPath {
 	pub evaluated_path: String,
 	pub resolved_path: String,
 }
+
+impl AssetPath {
+	/// Return the asset path. If the the evaluated path is not empty, it will
+	/// be returned, otherwise the raw, authored path is returned. The value this
+	/// function returns is the exact input that is passed to asset resolution.
+	pub fn asset_path(&self) -> &String {
+		if !self.evaluated_path.is_empty() {
+			&self.evaluated_path
+		} else {
+			&self.authored_path
+		}
+	}
+}

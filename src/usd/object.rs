@@ -26,6 +26,11 @@ impl<'a> Object<'a> {
 		Object { stage, path }
 	}
 
+	/// Return true if this is a valid object, false otherwise.
+	pub fn is_valid(&self) -> bool {
+		self.spec_type().is_some()
+	}
+
 	/// Return the stage that owns the object, and to whose state and lifetime this object's validity is tied.
 	pub fn stage(&self) -> &usd::Stage {
 		self.stage

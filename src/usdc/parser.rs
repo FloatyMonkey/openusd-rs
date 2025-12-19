@@ -1048,7 +1048,7 @@ impl CrateIo for vt::Dictionary {
 	}
 }
 
-impl CrateIo for sdf::LayerOffset {
+impl CrateIo for sdf::Retiming {
 	fn read(_file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
 		Ok(Self {
 			offset: cursor.read_as::<f64>()?,
@@ -1062,7 +1062,7 @@ impl CrateIo for sdf::Reference {
 		Ok(Self {
 			asset_path: file.read::<String>(cursor)?,
 			prim_path: file.read::<sdf::Path>(cursor)?,
-			layer_offset: file.read::<sdf::LayerOffset>(cursor)?,
+			layer_offset: file.read::<sdf::Retiming>(cursor)?,
 			custom_data: file.read::<vt::Dictionary>(cursor)?,
 		})
 	}
@@ -1073,7 +1073,7 @@ impl CrateIo for sdf::Payload {
 		Ok(Self {
 			asset_path: file.read::<String>(cursor)?,
 			prim_path: file.read::<sdf::Path>(cursor)?,
-			layer_offset: file.read::<sdf::LayerOffset>(cursor)?,
+			layer_offset: file.read::<sdf::Retiming>(cursor)?,
 		})
 	}
 }

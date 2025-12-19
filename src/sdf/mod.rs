@@ -5,11 +5,13 @@ mod list_op;
 mod path;
 mod path_node;
 mod path_parser;
+mod retiming;
 mod schema;
 
 pub use abstract_data::*;
 pub use list_op::*;
 pub use path::*;
+pub use retiming::*;
 pub use schema::{CHILDREN_KEYS, FIELD_KEYS};
 
 use crate::vt;
@@ -56,13 +58,6 @@ pub enum Variability {
 	Uniform,
 }
 
-/// Represents a time offset and scale between layers.
-#[derive(Debug, Default, Clone)]
-pub struct LayerOffset {
-	pub offset: f64,
-	pub scale: f64,
-}
-
 /// Represents a reference and all its meta data.
 #[derive(Debug, Default, Clone)]
 pub struct Reference {
@@ -71,7 +66,7 @@ pub struct Reference {
 	/// The path to the referenced prim in the external layer.
 	pub prim_path: Path,
 	/// The layer offset to transform time.
-	pub layer_offset: LayerOffset,
+	pub layer_offset: Retiming,
 	/// The custom data associated with the reference.
 	pub custom_data: vt::Dictionary,
 }
@@ -84,7 +79,7 @@ pub struct Payload {
 	/// The root prim path to the referenced prim in the external layer.
 	pub prim_path: Path,
 	/// The layer offset to transform time.
-	pub layer_offset: LayerOffset,
+	pub layer_offset: Retiming,
 }
 
 /// A single relocate specifying a source and target path for a relocation.

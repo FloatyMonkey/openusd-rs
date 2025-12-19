@@ -578,9 +578,7 @@ fn prim_spec<'a>(i: &mut In<'a>) -> PResult<()> {
 			if let Some(inherits) = meta.get("inherits")
 				&& let Some(path) = inherits.get::<sdf::Path>()
 			{
-				let mut inherit_paths = sdf::PathListOp::default();
-				inherit_paths.explicit_items.push(path.clone());
-				inherit_paths.is_explicit = true;
+				let inherit_paths = sdf::PathListOp::from_explicit([path.clone()].to_vec());
 				spec.add(&FIELD_KEYS.inherit_paths, inherit_paths.clone());
 				println!("Parsed inherits: {:?}", inherit_paths);
 			}

@@ -17,7 +17,8 @@ impl<'a> Relationship<'a> {
 	pub fn targets(&self) -> Vec<sdf::Path> {
 		self.metadata::<sdf::PathListOp>(&sdf::FIELD_KEYS.target_paths)
 			.unwrap_or_default()
-			.explicit_items
+			.explicit_items()
+			.map_or(Vec::new(), |items| items.clone())
 	}
 }
 

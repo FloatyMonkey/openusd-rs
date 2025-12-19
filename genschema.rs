@@ -44,7 +44,7 @@ fn process_prim(prim: &usd::Prim, class_defs: &mut Vec<ClassDef>) {
 		if let Some(inherit_paths) =
 			prim.metadata::<sdf::PathListOp>(&sdf::FIELD_KEYS.inherit_paths)
 		{
-			for inherit_path in &inherit_paths.explicit_items {
+			for inherit_path in inherit_paths.explicit_items().unwrap_or(&Vec::new()) {
 				inherits.push(inherit_path.name_token().to_string());
 			}
 		}

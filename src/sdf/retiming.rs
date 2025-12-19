@@ -32,3 +32,19 @@ impl std::ops::Mul<f64> for Retiming {
 		rhs * self.scale + self.offset
 	}
 }
+
+impl PartialEq for Retiming {
+	fn eq(&self, other: &Self) -> bool {
+		self.offset.to_bits() == other.offset.to_bits()
+			&& self.scale.to_bits() == other.scale.to_bits()
+	}
+}
+
+impl Eq for Retiming {}
+
+impl std::hash::Hash for Retiming {
+	fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+		self.offset.to_bits().hash(state);
+		self.scale.to_bits().hash(state);
+	}
+}

@@ -226,73 +226,65 @@ impl ValueRep {
 pub struct ListOpHeader(u8);
 
 impl ListOpHeader {
-	const IS_EXPLICIT_BIT: u8 = 1 << 0;
-	const HAS_EXPLICIT_ITEMS_BIT: u8 = 1 << 1;
-	const HAS_ADDED_ITEMS_BIT: u8 = 1 << 2;
-	const HAS_DELETED_ITEMS_BIT: u8 = 1 << 3;
-	const HAS_ORDERED_ITEMS_BIT: u8 = 1 << 4;
-	const HAS_PREPENDED_ITEMS_BIT: u8 = 1 << 5;
-	const HAS_APPENDED_ITEMS_BIT: u8 = 1 << 6;
+	const MAKE_EXPLICIT_BIT: u8 = 1 << 0;
+	const EXPLICIT_ITEMS_BIT: u8 = 1 << 1;
+	const ADD_ITEMS_BIT: u8 = 1 << 2;
+	const DELETE_ITEMS_BIT: u8 = 1 << 3;
+	const REORDER_ITEMS_BIT: u8 = 1 << 4;
+	const PREPEND_ITEMS_BIT: u8 = 1 << 5;
+	const APPEND_ITEMS_BIT: u8 = 1 << 6;
 
-	pub fn is_explicit(&self) -> bool {
-		self.0 & Self::IS_EXPLICIT_BIT != 0
+	pub fn is_make_explicit(&self) -> bool {
+		self.0 & Self::MAKE_EXPLICIT_BIT != 0
 	}
 
 	pub fn has_explicit_items(&self) -> bool {
-		self.0 & Self::HAS_EXPLICIT_ITEMS_BIT != 0
+		self.0 & Self::EXPLICIT_ITEMS_BIT != 0
 	}
 
-	pub fn has_added_items(&self) -> bool {
-		self.0 & Self::HAS_ADDED_ITEMS_BIT != 0
+	pub fn has_add_items(&self) -> bool {
+		self.0 & Self::ADD_ITEMS_BIT != 0
 	}
 
-	pub fn has_prepended_items(&self) -> bool {
-		self.0 & Self::HAS_PREPENDED_ITEMS_BIT != 0
+	pub fn has_delete_items(&self) -> bool {
+		self.0 & Self::DELETE_ITEMS_BIT != 0
 	}
 
-	pub fn has_appended_items(&self) -> bool {
-		self.0 & Self::HAS_APPENDED_ITEMS_BIT != 0
+	pub fn has_reorder_items(&self) -> bool {
+		self.0 & Self::REORDER_ITEMS_BIT != 0
 	}
 
-	pub fn has_deleted_items(&self) -> bool {
-		self.0 & Self::HAS_DELETED_ITEMS_BIT != 0
+	pub fn has_prepend_items(&self) -> bool {
+		self.0 & Self::PREPEND_ITEMS_BIT != 0
 	}
 
-	pub fn has_ordered_items(&self) -> bool {
-		self.0 & Self::HAS_ORDERED_ITEMS_BIT != 0
+	pub fn has_append_items(&self) -> bool {
+		self.0 & Self::APPEND_ITEMS_BIT != 0
 	}
 }
 
-impl<T> From<&sdf::ListOp<T>> for ListOpHeader {
+impl<T: std::hash::Hash + Eq + Clone + std::fmt::Debug> From<&sdf::ListOp<T>> for ListOpHeader {
 	fn from(op: &sdf::ListOp<T>) -> Self {
 		let mut header = ListOpHeader(0);
 
-		if op.is_explicit {
-			header.0 |= ListOpHeader::IS_EXPLICIT_BIT;
+		if op.is_explicit() {
+			header.0 |= ListOpHeader::MAKE_EXPLICIT_BIT;
+
+			if !op.explicit_items().unwrap().is_empty() {
+				header.0 |= ListOpHeader::EXPLICIT_ITEMS_BIT;
+			}
 		}
 
-		if !op.explicit_items.is_empty() {
-			header.0 |= ListOpHeader::HAS_EXPLICIT_ITEMS_BIT;
+		if !op.prepended_items().is_empty() {
+			header.0 |= ListOpHeader::PREPEND_ITEMS_BIT;
 		}
 
-		if !op.added_items.is_empty() {
-			header.0 |= ListOpHeader::HAS_ADDED_ITEMS_BIT;
+		if !op.appended_items().is_empty() {
+			header.0 |= ListOpHeader::APPEND_ITEMS_BIT;
 		}
 
-		if !op.prepended_items.is_empty() {
-			header.0 |= ListOpHeader::HAS_PREPENDED_ITEMS_BIT;
-		}
-
-		if !op.appended_items.is_empty() {
-			header.0 |= ListOpHeader::HAS_APPENDED_ITEMS_BIT;
-		}
-
-		if !op.deleted_items.is_empty() {
-			header.0 |= ListOpHeader::HAS_DELETED_ITEMS_BIT;
-		}
-
-		if !op.ordered_items.is_empty() {
-			header.0 |= ListOpHeader::HAS_ORDERED_ITEMS_BIT;
+		if !op.deleted_items().is_empty() {
+			header.0 |= ListOpHeader::DELETE_ITEMS_BIT;
 		}
 
 		header
@@ -837,41 +829,50 @@ impl<T: Copy + crate::io_ext::Readable + crate::io_ext::Writeable> CrateIo for T
 	}
 }
 
-impl<T: CrateIo + Default> CrateIo for sdf::ListOp<T> {
+impl<T: CrateIo + Default + std::hash::Hash + Eq + Clone + std::fmt::Debug> CrateIo
+	for sdf::ListOp<T>
+{
 	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
 		let h = ListOpHeader(cursor.read_as::<u8>()?);
 
-		let mut list_op = sdf::ListOp::default();
-
-		if h.is_explicit() {
-			list_op.is_explicit = true;
-		}
+		let mut explicit_items = None;
+		let mut prepended_items = Vec::new();
+		let mut appended_items = Vec::new();
+		let mut deleted_items = Vec::new();
 
 		if h.has_explicit_items() {
-			list_op.explicit_items = read_typed_vec(file, cursor)?;
+			explicit_items = Some(read_typed_vec(file, cursor)?);
+		} else if h.is_make_explicit() {
+			explicit_items = Some(Vec::new());
 		}
 
-		if h.has_added_items() {
-			list_op.added_items = read_typed_vec(file, cursor)?;
+		if h.has_add_items() {
+			read_typed_vec::<T>(file, cursor)?;
+			println!("ListOp 'add' operation is deprecated (discarding)");
 		}
 
-		if h.has_prepended_items() {
-			list_op.prepended_items = read_typed_vec(file, cursor)?;
+		if h.has_prepend_items() {
+			prepended_items = read_typed_vec(file, cursor)?;
 		}
 
-		if h.has_appended_items() {
-			list_op.appended_items = read_typed_vec(file, cursor)?;
+		if h.has_append_items() {
+			appended_items = read_typed_vec(file, cursor)?;
 		}
 
-		if h.has_deleted_items() {
-			list_op.deleted_items = read_typed_vec(file, cursor)?;
+		if h.has_delete_items() {
+			deleted_items = read_typed_vec(file, cursor)?;
 		}
 
-		if h.has_ordered_items() {
-			list_op.ordered_items = read_typed_vec(file, cursor)?;
+		if h.has_reorder_items() {
+			read_typed_vec::<T>(file, cursor)?;
+			println!("ListOp 'reorder' operation is deprecated (discarding)");
 		}
 
-		Ok(list_op)
+		Ok(if let Some(explicit_items) = explicit_items {
+			sdf::ListOp::from_explicit(explicit_items)
+		} else {
+			sdf::ListOp::from_composable(prepended_items, appended_items, deleted_items)
+		})
 	}
 
 	fn write(&self, file: &mut UsdcFile, cursor: &mut Cursor<&mut [u8]>) -> Result<()> {
@@ -880,27 +881,19 @@ impl<T: CrateIo + Default> CrateIo for sdf::ListOp<T> {
 		cursor.write_as::<u8>(h.0)?;
 
 		if h.has_explicit_items() {
-			write_typed_vec(file, cursor, &self.explicit_items)?;
+			write_typed_vec(file, cursor, self.explicit_items().unwrap_or(&Vec::new()))?;
 		}
 
-		if h.has_added_items() {
-			write_typed_vec(file, cursor, &self.added_items)?;
+		if h.has_prepend_items() {
+			write_typed_vec(file, cursor, self.prepended_items())?;
 		}
 
-		if h.has_prepended_items() {
-			write_typed_vec(file, cursor, &self.prepended_items)?;
+		if h.has_append_items() {
+			write_typed_vec(file, cursor, self.appended_items())?;
 		}
 
-		if h.has_appended_items() {
-			write_typed_vec(file, cursor, &self.appended_items)?;
-		}
-
-		if h.has_deleted_items() {
-			write_typed_vec(file, cursor, &self.deleted_items)?;
-		}
-
-		if h.has_ordered_items() {
-			write_typed_vec(file, cursor, &self.ordered_items)?;
+		if h.has_delete_items() {
+			write_typed_vec(file, cursor, self.deleted_items())?;
 		}
 
 		Ok(())
@@ -921,9 +914,6 @@ impl UsdcFile {
 		cursor.read_exact(&mut version)?;
 
 		let version = Version::new(version[0], version[1], version[2]);
-
-		// Version 0.8.0 will be the minimum supported version somewhere in the future:
-		// https://github.com/PixarAnimationStudios/OpenUSD/commit/09b8c2c
 		assert!(version >= Version::new(0, 8, 0) && version <= Version::new(0, 12, 0));
 
 		let toc = read_toc(&mut cursor)?;
@@ -1059,12 +1049,15 @@ impl CrateIo for sdf::Retiming {
 
 impl CrateIo for sdf::Reference {
 	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
-		Ok(Self {
+		let reference = Self {
 			asset_path: file.read::<String>(cursor)?,
 			prim_path: file.read::<sdf::Path>(cursor)?,
 			layer_offset: file.read::<sdf::Retiming>(cursor)?,
-			custom_data: file.read::<vt::Dictionary>(cursor)?,
-		})
+		};
+
+		file.read::<vt::Dictionary>(cursor)?;
+
+		Ok(reference)
 	}
 }
 

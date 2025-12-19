@@ -14,8 +14,6 @@ pub use path::*;
 pub use retiming::*;
 pub use schema::{CHILDREN_KEYS, FIELD_KEYS};
 
-use crate::vt;
-
 /// An enum that specifies the type of an object.
 /// Objects have fields and are adressable by path.
 #[repr(u32)]
@@ -59,7 +57,7 @@ pub enum Variability {
 }
 
 /// Represents a reference and all its meta data.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct Reference {
 	/// The asset path to the external layer.
 	pub asset_path: String,
@@ -67,12 +65,10 @@ pub struct Reference {
 	pub prim_path: Path,
 	/// The layer offset to transform time.
 	pub layer_offset: Retiming,
-	/// The custom data associated with the reference.
-	pub custom_data: vt::Dictionary,
 }
 
 /// Represents a payload and all its meta data.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct Payload {
 	/// The asset path to the external layer.
 	pub asset_path: String,

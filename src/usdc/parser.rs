@@ -98,7 +98,7 @@ struct Field {
 struct Spec {
 	path_index: PathIndex,
 	field_set_index: FieldSetIndex,
-	spec_type: sdf::SpecType,
+	spec_form: sdf::SpecForm,
 }
 
 #[repr(u32)]
@@ -442,7 +442,7 @@ fn read_specs(cursor: &mut Cursor<&[u8]>, section: &Section) -> Result<Vec<Spec>
 		spec.push(Spec {
 			path_index: PathIndex(path_indices[i]),
 			field_set_index: FieldSetIndex(field_set_indices[i]),
-			spec_type: unsafe { std::mem::transmute::<u32, sdf::SpecType>(spec_types[i]) },
+			spec_form: unsafe { std::mem::transmute::<u32, sdf::SpecForm>(spec_types[i]) },
 		});
 	}
 
@@ -1112,7 +1112,7 @@ fn fields<'a>(usdc: &'a UsdcFile, spec: &Spec) -> impl Iterator<Item = &'a Field
 
 struct SpecData {
 	fields: Vec<FieldValuePair>,
-	spec_type: sdf::SpecType,
+	spec_form: sdf::SpecForm,
 }
 
 pub struct Data {
@@ -1129,8 +1129,8 @@ impl Data {
 }
 
 impl sdf::AbstractData for Data {
-	fn spec_type(&self, path: &sdf::Path) -> Option<sdf::SpecType> {
-		// TODO: self.data.get(path).map(|spec| spec.spec_type)
+	fn spec_form(&self, path: &sdf::Path) -> Option<sdf::SpecForm> {
+		// TODO: self.data.get(path).map(|spec| spec.spec_form)
 
 		let path_index = PathIndex(self.crate_data.paths.iter().position(|p| *p == *path)? as u32);
 
@@ -1138,7 +1138,7 @@ impl sdf::AbstractData for Data {
 			.specs
 			.iter()
 			.find(|s| s.path_index == path_index)
-			.map(|spec| spec.spec_type)
+			.map(|spec| spec.spec_form)
 	}
 
 	fn get(&self, path: &sdf::Path, field: &tf::Token) -> Option<vt::Value> {

@@ -5,14 +5,14 @@ use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct Spec {
-	pub ty: sdf::SpecType,
+	pub form: sdf::SpecForm,
 	pub fields: HashMap<tf::Token, vt::Value>,
 }
 
 impl Spec {
-	pub fn new(ty: sdf::SpecType) -> Self {
+	pub fn new(form: sdf::SpecForm) -> Self {
 		Spec {
-			ty,
+			form,
 			fields: HashMap::new(),
 		}
 	}
@@ -28,8 +28,8 @@ pub struct UsdaFile {
 }
 
 impl sdf::AbstractData for UsdaFile {
-	fn spec_type(&self, path: &sdf::Path) -> Option<sdf::SpecType> {
-		self.data.get(path).map(|spec| spec.ty)
+	fn spec_form(&self, path: &sdf::Path) -> Option<sdf::SpecForm> {
+		self.data.get(path).map(|spec| spec.form)
 	}
 
 	fn get(&self, path: &sdf::Path, field: &tf::Token) -> Option<vt::Value> {

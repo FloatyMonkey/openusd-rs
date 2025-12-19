@@ -431,7 +431,7 @@ fn attribute_spec<'a>(i: &mut In<'a>) -> PResult<()> {
 
 	let metadata = opt(i, parse_metadata)?;
 
-	let mut spec = Spec::new(sdf::SpecType::Attribute);
+	let mut spec = Spec::new(sdf::SpecForm::Attribute);
 	spec.add(&FIELD_KEYS.custom, is_custom);
 	if let Some(var) = variability {
 		spec.add(&FIELD_KEYS.variability, var);
@@ -482,7 +482,7 @@ fn relationship_spec<'a>(i: &mut In<'a>) -> PResult<()> {
 
 	let metadata = opt(i, parse_metadata)?;
 
-	let mut spec = Spec::new(sdf::SpecType::Relationship);
+	let mut spec = Spec::new(sdf::SpecForm::Relationship);
 	spec.add(&FIELD_KEYS.custom, is_custom);
 
 	if is_varying {
@@ -562,7 +562,7 @@ fn prim_spec<'a>(i: &mut In<'a>) -> PResult<()> {
 		let children = i.ctx.parent_children_stack.pop().unwrap_or_default();
 		let properties = i.ctx.parent_properties_stack.pop().unwrap_or_default();
 
-		let mut spec = Spec::new(sdf::SpecType::Prim);
+		let mut spec = Spec::new(sdf::SpecForm::Prim);
 		spec.add(&FIELD_KEYS.specifier, specifier);
 		if let Some(type_name) = &type_name {
 			spec.add(&FIELD_KEYS.type_name, type_name.clone());
@@ -627,7 +627,7 @@ pub fn parse(input_str: &str) -> PResult<UsdaFile> {
 	let mut ctx = Context::new();
 	let mut input = Input::new(input_str, &mut ctx);
 
-	let mut pseudo_root = Spec::new(sdf::SpecType::PseudoRoot);
+	let mut layer = Spec::new(sdf::SpecForm::Layer);
 	let root_path = sdf::Path::absolute_root_path();
 
 	let result = layer_spec(&mut input);
@@ -638,9 +638,9 @@ pub fn parse(input_str: &str) -> PResult<UsdaFile> {
 
 	let root_children = input.ctx.parent_children_stack.pop().unwrap_or_default();
 
-	pseudo_root.add(&CHILDREN_KEYS.prim_children, root_children);
+	layer.add(&CHILDREN_KEYS.prim_children, root_children);
 
-	input.ctx.add_spec(root_path, pseudo_root);
+	input.ctx.add_spec(root_path, layer);
 
 	let text_data = input.ctx.text_data();
 

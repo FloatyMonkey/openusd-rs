@@ -28,7 +28,7 @@ impl<'a> Object<'a> {
 
 	/// Return true if this is a valid object, false otherwise.
 	pub fn is_valid(&self) -> bool {
-		self.spec_type().is_some()
+		self.spec_form().is_some()
 	}
 
 	/// Return the stage that owns the object, and to whose state and lifetime this object's validity is tied.
@@ -74,7 +74,7 @@ impl<'a> Object<'a> {
 	}
 
 	#[doc(hidden)]
-	pub fn spec_type(&self) -> Option<sdf::SpecType> {
-		self.stage().data().spec_type(self.path())
+	pub fn spec_form(&self) -> Option<sdf::SpecForm> {
+		self.stage().data().spec_form(self.path())
 	}
 }

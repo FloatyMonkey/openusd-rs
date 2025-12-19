@@ -18,20 +18,20 @@ pub use schema::{CHILDREN_KEYS, FIELD_KEYS};
 /// Objects have fields and are adressable by path.
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum SpecType {
+pub enum SpecForm {
 	// Note: Do not change the order, it is used in the binary format!
 	Unknown = 0,
-	Attribute,
-	Connection,
-	Expression,
-	Mapper,
-	MapperArg,
-	Prim,
-	PseudoRoot,
-	Relationship,
-	RelationshipTarget,
-	Variant,
-	VariantSet,
+	Attribute = 1,
+	// Connection = 2,
+	// Expression = 3,
+	// Mapper = 4,
+	// MapperArg = 5,
+	Prim = 6,
+	Layer = 7,
+	Relationship = 8,
+	// RelationshipTarget = 9,
+	Variant = 10,
+	VariantSet = 11,
 }
 
 /// An enum that identifies the possible specifiers for a PrimSpec.

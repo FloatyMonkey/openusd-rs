@@ -72,7 +72,7 @@ fn process_prim(prim: &usd::Prim, class_defs: &mut Vec<ClassDef>) {
 					.and_then(|v| v.get::<String>())
 					.unwrap_or_else(|| prop_name.to_string());
 
-				let is_relationship = prop.spec_type() == Some(sdf::SpecType::Relationship);
+				let is_relationship = prop.spec_form() == Some(sdf::SpecForm::Relationship);
 
 				properties.push(PropertyDef {
 					name: prop_name.to_string(),

@@ -9,7 +9,7 @@
 
 </div>
 
-For now, the focus is on reading from flattened files. It is already possible to extract basic scene information for rendering. Expect major API changes during the early stages of development. Once the official OpenUSD specification is released, we aim to be compliant where possible.
+For now, the focus is on reaching compliance with the recently released USD Core Specification. It is already possible to extract basic scene information for rendering. Expect major API changes during the early stages of development.
 
 Currently mostly reflects the needs of our own [engine](https://github.com/FloatyMonkey/engine) but contributions are more than welcome.
 

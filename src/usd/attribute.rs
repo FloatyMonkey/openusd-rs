@@ -16,8 +16,7 @@ impl<'a> Attribute<'a> {
 	#[track_caller]
 	pub fn get<T: ValueType>(&self) -> T {
 		self.stage()
-			.data()
-			.get(self.path(), &sdf::FIELD_KEYS.default)
+			.resolve_value(self.path(), &sdf::FIELD_KEYS.default)
 			.unwrap()
 			.get::<T>()
 			.unwrap()
@@ -25,15 +24,13 @@ impl<'a> Attribute<'a> {
 
 	pub fn try_get<T: ValueType>(&self) -> Option<T> {
 		self.stage()
-			.data()
-			.get(self.path(), &sdf::FIELD_KEYS.default)
+			.resolve_value(self.path(), &sdf::FIELD_KEYS.default)
 			.and_then(|v| v.get::<T>())
 	}
 
 	pub fn get_value(&self) -> Option<vt::Value> {
 		self.stage()
-			.data()
-			.get(self.path(), &sdf::FIELD_KEYS.default)
+			.resolve_value(self.path(), &sdf::FIELD_KEYS.default)
 	}
 
 	pub fn type_name(&self) -> tf::Token {

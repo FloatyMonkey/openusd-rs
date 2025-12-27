@@ -92,6 +92,8 @@ def_value_types!(
 	(u8, UChar, UCharArray),
 	(i32, Int, IntArray),
 	(u32, UInt, UIntArray),
+	(i64, Int64, Int64Array),
+	(u64, UInt64, UInt64Array),
 	(f16, Half, HalfArray),
 	(f32, Float, FloatArray),
 	(f64, Double, DoubleArray),
@@ -137,6 +139,12 @@ def_value_types!(
 	//
 	(sdf::Specifier, Specifier),
 	(sdf::Variability, Variability),
+	(sdf::Retiming, Retiming, RetimingArray),
+	(sdf::Relocate, Relocate, RelocateArray),
+	//
+	(sdf::ValueBlock, ValueBlock),
 	//
 	(Dictionary, Dictionary),
+	(sdf::TimeSampleMap, TimeSampleMap),
+	(sdf::VariantSelectionMap, VariantSelectionMap)
 );

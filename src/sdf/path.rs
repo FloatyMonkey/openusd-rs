@@ -41,6 +41,15 @@ impl Path {
 		*self == Self::empty_path()
 	}
 
+	/// Returns true if this path is absolute.
+	pub fn is_absolute(&self) -> bool {
+		self.prim != INVALID_NODE_HANDLE && {
+			let prim_pool = PATH_PRIM_PART_POOL.read().unwrap();
+			let prim_node = prim_pool.get(self.prim).unwrap();
+			prim_node.is_absolute_path()
+		}
+	}
+
 	/// Returns true if this path is the [`Self::absolute_root_path`].
 	pub fn is_absolute_root(&self) -> bool {
 		*self == Self::absolute_root_path()
@@ -208,6 +217,30 @@ impl Path {
 		}
 
 		tf::Token::empty()
+	}
+
+	/// Returns the variant selection for this path, if this is a variant selection path.
+	/// Returns a pair of empty strings if this path is not a variant selection path.
+	pub fn variant_selection(&self) -> (String, String) {
+		if self.prop != INVALID_NODE_HANDLE {
+			return (String::new(), String::new());
+		}
+
+		let prim_pool = PATH_PRIM_PART_POOL.read().unwrap();
+		let prim_node = prim_pool.get(self.prim).unwrap();
+
+		if let PathNodeData::PrimVariantSelection {
+			variant_set,
+			variant_name,
+		} = &prim_node.data
+		{
+			return (
+				variant_set.as_str().to_string(),
+				variant_name.as_str().to_string(),
+			);
+		}
+
+		(String::new(), String::new())
 	}
 }
 
@@ -428,6 +461,28 @@ impl Path {
 			),
 		}
 	}
+
+	/// Creates a path by extracting and appending an element from the given ascii element encoding.
+	pub fn append_element(&self, element: &tf::Token) -> Self {
+		let element_str = element.as_str();
+		assert!(!element_str.starts_with(".")); // Don't use this for properties
+
+		if element_str.starts_with('{') && element_str.ends_with('}') {
+			// Variant selection
+			let content = &element_str[1..element_str.len() - 1];
+			if let Some(eq_index) = content.find('=') {
+				let variant_set = &content[..eq_index];
+				let variant_name = &content[eq_index + 1..];
+				return self.append_variant_selection(variant_set, variant_name);
+			}
+		} else {
+			// Prim child
+			let name = tf::Token::new(element_str);
+			return self.append_child(&name);
+		}
+
+		Self::empty_path()
+	}
 }
 
 impl Default for Path {
@@ -497,6 +552,14 @@ mod tests {
 
 	fn t(s: &str) -> tf::Token {
 		tf::Token::new(s)
+	}
+
+	#[test]
+	fn is_absolute() {
+		assert!(!Path::empty_path().is_absolute());
+		assert!(p("/").is_absolute());
+		assert!(p("/foo/bar.prop").is_absolute());
+		assert!(!p("foo/bar.prop").is_absolute());
 	}
 
 	#[test]

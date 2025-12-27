@@ -1,5 +1,6 @@
 use super::Path;
 use crate::{declare_public_tokens, tf};
+use std::collections::HashMap;
 use std::sync::{LazyLock, RwLock};
 
 declare_public_tokens!(PathTokens, PATH_TOKENS, [
@@ -9,7 +10,7 @@ declare_public_tokens!(PathTokens, PATH_TOKENS, [
 	expression_indicator: "expression"
 ]);
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum PathNodeData {
 	Root,
 	Prim {
@@ -228,36 +229,41 @@ pub const ABSOLUTE_ROOT_NODE_HANDLE: PoolHandle = 0;
 pub const RELATIVE_ROOT_NODE_HANDLE: PoolHandle = 1;
 pub const INVALID_NODE_HANDLE: PoolHandle = u32::MAX;
 
-pub struct Pool<T> {
-	elements: Vec<T>,
+pub struct PathPool {
+	elements: Vec<PathNode>,
 	free_list: Vec<usize>,
+	map: HashMap<(PoolHandle, PathNodeData), PoolHandle>,
 }
 
-impl<T> Pool<T> {
+impl PathPool {
 	fn new() -> Self {
-		Pool {
+		Self {
 			elements: Vec::new(),
 			free_list: Vec::new(),
+			map: HashMap::new(),
 		}
 	}
 
-	fn insert(&mut self, element: T) -> PoolHandle {
-		if let Some(index) = self.free_list.pop() {
-			self.elements[index] = element;
+	fn insert(&mut self, node: PathNode) -> PoolHandle {
+		let key = (node.parent, node.data.clone());
+		let handle = if let Some(index) = self.free_list.pop() {
+			self.elements[index] = node;
 			index as PoolHandle
 		} else {
-			self.elements.push(element);
+			self.elements.push(node);
 			(self.elements.len() - 1) as PoolHandle
-		}
+		};
+		self.map.insert(key, handle);
+		handle
 	}
 
-	pub fn get(&self, handle: PoolHandle) -> Option<&T> {
+	pub fn get(&self, handle: PoolHandle) -> Option<&PathNode> {
 		self.elements.get(handle as usize)
 	}
 }
 
-pub static PATH_PRIM_PART_POOL: LazyLock<RwLock<Pool<PathNode>>> = LazyLock::new(|| {
-	let mut pool = Pool::new();
+pub static PATH_PRIM_PART_POOL: LazyLock<RwLock<PathPool>> = LazyLock::new(|| {
+	let mut pool = PathPool::new();
 
 	pool.insert(PathNode {
 		parent: INVALID_NODE_HANDLE,
@@ -278,28 +284,28 @@ pub static PATH_PRIM_PART_POOL: LazyLock<RwLock<Pool<PathNode>>> = LazyLock::new
 	RwLock::new(pool)
 });
 
-pub static PATH_PROP_PART_POOL: LazyLock<RwLock<Pool<PathNode>>> =
-	LazyLock::new(|| RwLock::new(Pool::new()));
+pub static PATH_PROP_PART_POOL: LazyLock<RwLock<PathPool>> =
+	LazyLock::new(|| RwLock::new(PathPool::new()));
 
 pub fn find_or_create_path_node(
-	pool: &'static LazyLock<RwLock<Pool<PathNode>>>,
+	pool: &'static LazyLock<RwLock<PathPool>>,
 	parent: Option<PoolHandle>,
 	data: &PathNodeData,
 ) -> PoolHandle {
 	let mut w_pool = pool.write().unwrap();
+	let parent_handle = parent.unwrap_or(INVALID_NODE_HANDLE);
 
-	for (i, node) in w_pool.elements.iter().enumerate() {
-		if node.data == *data && node.parent == parent.unwrap_or(INVALID_NODE_HANDLE) {
-			node.ref_count
-				.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-			return i as PoolHandle;
-		}
+	if let Some(&handle) = w_pool.map.get(&(parent_handle, data.clone())) {
+		let node = w_pool.get(handle).unwrap();
+		node.ref_count
+			.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+		return handle;
 	}
 
 	let parent_node = parent.and_then(|p| w_pool.get(p));
 
 	let node = PathNode {
-		parent: parent.unwrap_or(INVALID_NODE_HANDLE),
+		parent: parent_handle,
 		ref_count: std::sync::atomic::AtomicU32::new(1),
 		element_count: parent_node.map_or(0, |p| p.element_count + 1),
 		flags: parent_node.map_or(0, |p| p.flags) | PathNode::flags_from_node_type(data),

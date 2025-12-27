@@ -1,6 +1,7 @@
-//! Work in progress, opinionated implementation of [OpenUSD](https://github.com/PixarAnimationStudios/OpenUSD) in pure Rust
+//! Implementation of [OpenUSD](https://github.com/PixarAnimationStudios/OpenUSD) in pure Rust
 
 pub mod base;
+pub mod pcp;
 pub mod sdf;
 pub mod usd;
 

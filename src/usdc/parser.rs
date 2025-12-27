@@ -171,7 +171,7 @@ enum Type {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
 struct ValueRep(u64);
 
 impl ValueRep {
@@ -533,9 +533,7 @@ fn decompress_paths_recursive(
 			paths[path_indices[this_index] as usize] = if is_prim_property_path {
 				parent_path.append_property(elem_token)
 			} else {
-				// TODO: This should be append_element, the path is not necessarily
-				// just a child path but could be of another type eg. target, mapper, ...
-				parent_path.append_child(elem_token)
+				parent_path.append_element(elem_token)
 			};
 		}
 
@@ -637,6 +635,29 @@ fn read_inline(file: &UsdcFile, val: ValueRep) -> Option<vt::Value> {
 			file.get_token(token_index).clone().into()
 		}
 
+		Type::String => {
+			let token_index = StringIndex(val.payload() as Index);
+			file.get_string(token_index).to_string().into()
+		}
+
+		Type::Specifier => {
+			unsafe { std::mem::transmute::<u32, sdf::Specifier>(val.payload() as u32) }.into()
+		}
+
+		Type::Variability => {
+			unsafe { std::mem::transmute::<u32, sdf::Variability>(val.payload() as u32) }.into()
+		}
+
+		Type::ValueBlock => sdf::ValueBlock.into(),
+
+		Type::Bool => (val.payload() != 0).into(),
+
+		Type::UChar => (val.payload() as u8).into(),
+		Type::Int => (val.payload() as i32).into(),
+		Type::UInt => (val.payload() as u32).into(),
+		Type::Int64 => (val.payload() as i64).into(),
+		Type::UInt64 => val.payload().into(),
+
 		Type::Half => f16::from_bits(val.payload() as u16).into(),
 		Type::Float => f32::from_bits(val.payload() as u32).into(),
 		Type::Double => f64::from_bits(val.payload()).into(),
@@ -678,6 +699,9 @@ fn unpack_value_rep(file: &UsdcFile, value: ValueRep) -> Result<Option<vt::Value
 		Type::Half if value.is_array() => read_float_array::<f16>(&mut cursor, value)?.into(),
 		Type::Float if value.is_array() => read_float_array::<f32>(&mut cursor, value)?.into(),
 		Type::Double if value.is_array() => read_float_array::<f64>(&mut cursor, value)?.into(),
+		Type::DoubleVector => read_pod_vec::<f64>(&mut cursor)?.into(),
+
+		Type::String => file.read::<String>(&mut cursor)?.into(),
 
 		// TODO: This is always an inlined value
 		Type::AssetPath => {
@@ -717,47 +741,110 @@ fn unpack_value_rep(file: &UsdcFile, value: ValueRep) -> Result<Option<vt::Value
 		Type::Matrix3d => read_pod::<gf::Matrix3d>(&mut cursor)?.into(),
 		Type::Matrix4d => read_pod::<gf::Matrix4d>(&mut cursor)?.into(),
 
-		Type::PathVector => {
-			let indices = Vec::<Index>::read(file, &mut cursor)?;
-			let vector = indices
+		Type::TimeSamples => {
+			assert!(!value.is_inlined() && !value.is_compressed());
+
+			let offset = cursor.read_as::<i64>()?;
+			cursor.seek(std::io::SeekFrom::Current(offset - 8))?;
+
+			let times_rep = read_pod::<ValueRep>(&mut cursor)?;
+			assert!(
+				times_rep.ty() == Type::DoubleVector
+					|| (times_rep.ty() == Type::Double && times_rep.is_array())
+			);
+
+			let saved_position = cursor.stream_position()?;
+
+			let times_value = unpack_value_rep(file, times_rep)?.unwrap();
+
+			let times = times_value.get::<vt::Array<f64>>().unwrap();
+
+			cursor.set_position(saved_position);
+
+			let offset = cursor.read_as::<i64>()?;
+			cursor.seek(std::io::SeekFrom::Current(offset - 8))?;
+
+			let count = cursor.read_as::<u64>()? as usize;
+			assert_eq!(count, times.len());
+
+			let mut value_reps = Vec::with_capacity(count);
+			for _ in 0..count {
+				let val = cursor.read_as::<u64>()?;
+				value_reps.push(ValueRep(val));
+			}
+
+			let values = value_reps
+				.into_iter()
+				.map(|value| unpack_value_rep(file, value).unwrap().unwrap())
+				.collect::<Vec<_>>();
+
+			times
 				.iter()
-				.map(|i| file.get_path(PathIndex(*i)).clone())
-				.collect::<vt::Array<_>>();
-			vt::Value::new(vector)
+				.copied()
+				.zip(values)
+				.collect::<sdf::TimeSampleMap>()
+				.into()
 		}
 
-		Type::TokenVector => {
-			let indices = Vec::<Index>::read(file, &mut cursor)?;
-			let vector = indices
-				.iter()
-				.map(|i| file.get_token(TokenIndex(*i)).clone())
-				.collect::<vt::Array<_>>();
-			vt::Value::new(vector)
+		Type::PathVector => file
+			.read::<Vec<Index>>(&mut cursor)?
+			.iter()
+			.map(|i| file.get_path(PathIndex(*i)).clone())
+			.collect::<vt::Array<_>>()
+			.into(),
+
+		Type::TokenVector => file
+			.read::<Vec<Index>>(&mut cursor)?
+			.iter()
+			.map(|i| file.get_token(TokenIndex(*i)).clone())
+			.collect::<vt::Array<_>>()
+			.into(),
+
+		Type::StringVector => file
+			.read::<Vec<Index>>(&mut cursor)?
+			.iter()
+			.map(|i| file.get_string(StringIndex(*i)).to_string())
+			.collect::<vt::Array<_>>()
+			.into(),
+
+		Type::Token if value.is_array() => file
+			.read::<Vec<Index>>(&mut cursor)?
+			.iter()
+			.map(|i| file.get_token(TokenIndex(*i)).clone())
+			.collect::<vt::Array<_>>()
+			.into(),
+
+		Type::IntListOp => file.read::<sdf::IntListOp>(&mut cursor)?.into(),
+		Type::UIntListOp => file.read::<sdf::UIntListOp>(&mut cursor)?.into(),
+		Type::Int64ListOp => file.read::<sdf::Int64ListOp>(&mut cursor)?.into(),
+		Type::UInt64ListOp => file.read::<sdf::UInt64ListOp>(&mut cursor)?.into(),
+
+		Type::TokenListOp => file.read::<sdf::TokenListOp>(&mut cursor)?.into(),
+		Type::StringListOp => file.read::<sdf::StringListOp>(&mut cursor)?.into(),
+		Type::PathListOp => file.read::<sdf::PathListOp>(&mut cursor)?.into(),
+		Type::ReferenceListOp => file.read::<sdf::ReferenceListOp>(&mut cursor)?.into(),
+		Type::PayloadListOp => file.read::<sdf::PayloadListOp>(&mut cursor)?.into(),
+
+		Type::Payload => {
+			// TODO: Unsure if this is correct. However the payloads field is a ListOp according to the core spec.
+			let payload = file.read::<sdf::Payload>(&mut cursor)?;
+			sdf::PayloadListOp::from_explicit(vec![payload]).into()
 		}
 
-		Type::Token if value.is_array() => {
-			let indices = Vec::<Index>::read(file, &mut cursor)?;
-			let vector = indices
-				.iter()
-				.map(|i| file.get_token(TokenIndex(*i)).clone())
-				.collect::<vt::Array<_>>();
-			vt::Value::new(vector)
+		Type::LayerOffsetVector => {
+			vt::Array::from(read_typed_vec::<sdf::Retiming>(file, &mut cursor)?).into()
+		}
+		Type::Relocates => {
+			vt::Array::from(read_typed_vec::<sdf::Relocate>(file, &mut cursor)?).into()
 		}
 
-		Type::IntListOp => sdf::IntListOp::read(file, &mut cursor)?.into(),
-		Type::UIntListOp => sdf::UIntListOp::read(file, &mut cursor)?.into(),
-		Type::Int64ListOp => sdf::Int64ListOp::read(file, &mut cursor)?.into(),
-		Type::UInt64ListOp => sdf::UInt64ListOp::read(file, &mut cursor)?.into(),
+		Type::Dictionary => file.read::<vt::Dictionary>(&mut cursor)?.into(),
+		Type::VariantSelectionMap => file.read::<sdf::VariantSelectionMap>(&mut cursor)?.into(),
 
-		Type::TokenListOp => sdf::TokenListOp::read(file, &mut cursor)?.into(),
-		Type::StringListOp => sdf::StringListOp::read(file, &mut cursor)?.into(),
-		Type::PathListOp => sdf::PathListOp::read(file, &mut cursor)?.into(),
-		Type::ReferenceListOp => sdf::ReferenceListOp::read(file, &mut cursor)?.into(),
-		Type::PayloadListOp => sdf::PayloadListOp::read(file, &mut cursor)?.into(),
-
-		Type::Dictionary => vt::Dictionary::read(file, &mut cursor)?.into(),
-
-		_ => return Ok(None),
+		_ => {
+			println!("Unimplemented value type {:?}", value.ty());
+			return Ok(None);
+		}
 	}))
 }
 
@@ -847,8 +934,9 @@ impl<T: CrateIo + Default + std::hash::Hash + Eq + Clone + std::fmt::Debug> Crat
 		}
 
 		if h.has_add_items() {
-			read_typed_vec::<T>(file, cursor)?;
-			println!("ListOp 'add' operation is deprecated (discarding)");
+			// TODO: Should print a warning here, since this is non-normative
+			let items = read_typed_vec::<T>(file, cursor)?;
+			appended_items.extend(items);
 		}
 
 		if h.has_prepend_items() {
@@ -1023,18 +1111,16 @@ impl CrateIo for vt::Value {
 	}
 }
 
-impl CrateIo for vt::Dictionary {
+impl<K: CrateIo + Eq + std::hash::Hash, V: CrateIo> CrateIo for HashMap<K, V> {
 	fn read(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Self> {
 		let size = cursor.read_as::<u64>()? as usize;
-
-		Ok((0..size)
-			.map(|_| {
-				(
-					file.read::<String>(cursor).unwrap(),
-					file.read::<vt::Value>(cursor).unwrap(),
-				)
-			})
-			.collect())
+		let mut map = HashMap::with_capacity(size);
+		for _ in 0..size {
+			let key = file.read::<K>(cursor)?;
+			let value = file.read::<V>(cursor)?;
+			map.insert(key, value);
+		}
+		Ok(map)
 	}
 }
 

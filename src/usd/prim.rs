@@ -12,14 +12,15 @@ impl<'a> Prim<'a> {
 	}
 
 	pub fn specifier(&self) -> Option<sdf::Specifier> {
-		self.stage()
-			.data()
-			.get(self.path(), &sdf::FIELD_KEYS.specifier)
-			.and_then(|v| v.get::<sdf::Specifier>())
+		self.metadata(&sdf::FIELD_KEYS.specifier)
 	}
 
 	pub fn children<'b>(&'b self) -> ChildrenIter<'b> {
 		ChildrenIter::new(self.stage(), self.path())
+	}
+
+	pub fn properties<'b>(&'b self) -> PropertyIter<'b> {
+		PropertyIter::new(self.stage(), self.path())
 	}
 
 	pub fn type_name(&self) -> tf::Token {
@@ -33,6 +34,19 @@ impl<'a> Prim<'a> {
 	}
 }
 
+/// Variants
+impl<'a> Prim<'a> {
+	/// Return the variant selections that apply to this prim.
+	// TODO: Move this to a VariantSets wrapper.
+	pub fn variant_selections(&self) -> std::collections::HashMap<String, String> {
+		if let Some(index) = self.stage().prim_index(self.path()) {
+			index.variant_selections()
+		} else {
+			std::collections::HashMap::new()
+		}
+	}
+}
+
 /// Attributes
 impl<'a> Prim<'a> {
 	/// Return a [`usd::Attribute`] with the given `name`.
@@ -42,8 +56,7 @@ impl<'a> Prim<'a> {
 
 	pub fn has_attribute(&self, name: &tf::Token) -> bool {
 		self.stage()
-			.data()
-			.get(&self.path().append_property(name), &sdf::FIELD_KEYS.default)
+			.resolve_value(&self.path().append_property(name), &sdf::FIELD_KEYS.default)
 			.is_some()
 	}
 }
@@ -75,11 +88,7 @@ impl<'a> ChildrenIter<'a> {
 		ChildrenIter {
 			stage,
 			base_path: path.clone(),
-			prim_children: stage
-				.data()
-				.get(path, &sdf::CHILDREN_KEYS.prim_children)
-				.and_then(|v| v.get::<vt::Array<tf::Token>>())
-				.unwrap_or_default(),
+			prim_children: stage.compose_children(path),
 			index: 0,
 		}
 	}
@@ -93,6 +102,41 @@ impl<'a> Iterator for ChildrenIter<'a> {
 			let path = self.prim_children[self.index].clone();
 			self.index += 1;
 			Some(Prim::new(self.stage, self.base_path.append_child(&path)))
+		} else {
+			None
+		}
+	}
+}
+
+pub struct PropertyIter<'a> {
+	stage: &'a usd::Stage,
+	base_path: sdf::Path,
+	property_children: vt::Array<tf::Token>,
+	index: usize,
+}
+
+impl<'a> PropertyIter<'a> {
+	pub fn new(stage: &'a usd::Stage, path: &sdf::Path) -> Self {
+		PropertyIter {
+			stage,
+			base_path: path.clone(),
+			property_children: stage.compose_properties(path),
+			index: 0,
+		}
+	}
+}
+
+impl<'a> Iterator for PropertyIter<'a> {
+	type Item = Property<'a>;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		if self.index < self.property_children.len() {
+			let name = self.property_children[self.index].clone();
+			self.index += 1;
+			Some(Property::new(
+				self.stage,
+				self.base_path.append_property(&name),
+			))
 		} else {
 			None
 		}

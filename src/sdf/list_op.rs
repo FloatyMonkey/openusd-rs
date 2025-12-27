@@ -53,6 +53,22 @@ impl<T: Hash + Eq + Clone> ListOp<T> {
 		&self.deleted_items.elements
 	}
 
+	pub fn set_explicit_items(&mut self, items: Vec<T>) {
+		self.explicit_items = Some(items.into_iter().collect());
+	}
+
+	pub fn set_prepended_items(&mut self, items: Vec<T>) {
+		self.prepended_items = items.into_iter().collect();
+	}
+
+	pub fn set_appended_items(&mut self, items: Vec<T>) {
+		self.appended_items = items.into_iter().collect();
+	}
+
+	pub fn set_deleted_items(&mut self, items: Vec<T>) {
+		self.deleted_items = items.into_iter().collect();
+	}
+
 	pub fn from_explicit(explicit_items: Vec<T>) -> Self {
 		Self {
 			explicit_items: Some(explicit_items.into_iter().collect()),
@@ -258,6 +274,38 @@ impl<T: Hash + Eq + Clone> ListOp<T> {
 				.collect()
 		}
 	}
+
+	pub fn map<R, F>(&self, mut f: F) -> ListOp<R>
+	where
+		R: Hash + Eq + Clone,
+		F: FnMut(&T) -> R,
+	{
+		let explicit_items = self
+			.explicit_items
+			.as_ref()
+			.map(|ul| ul.iter().map(&mut f).collect::<UniqueList<R>>());
+
+		let prepended_items = self
+			.prepended_items
+			.iter()
+			.map(&mut f)
+			.collect::<UniqueList<R>>();
+
+		let appended_items = self
+			.appended_items
+			.iter()
+			.map(&mut f)
+			.collect::<UniqueList<R>>();
+
+		let deleted_items = self.deleted_items.iter().map(f).collect::<UniqueList<R>>();
+
+		ListOp {
+			explicit_items,
+			prepended_items,
+			appended_items,
+			deleted_items,
+		}
+	}
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -344,7 +392,7 @@ mod tests {
 
 	fn make_reference_list_op(data: &JsonListOp<i64>) -> ListOp<i64> {
 		if let Some(explicit) = &data.explicit_items {
-			return ListOp::from_explicit(explicit.iter().cloned().collect());
+			return ListOp::from_explicit(explicit.to_vec());
 		}
 
 		ListOp::from_composable(

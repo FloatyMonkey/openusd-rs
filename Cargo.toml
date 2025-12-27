@@ -2,15 +2,15 @@
 name = "openusd-rs"
 version = "0.1.0"
 edition = "2024"
-description = "Work in progress, opinionated implementation of OpenUSD in pure Rust"
+description = "Implementation of OpenUSD in pure Rust"
 repository = "https://github.com/FloatyMonkey/openusd-rs"
 license = "MIT OR Apache-2.0"
 categories = ["graphics", "encoding", "rendering::data-formats"]
 
 [dependencies]
-glam = "0.30.4"
-half = "2.6.0"
-lz4_flex = "0.11.5"
+glam = "0.30.9"
+half = "2.7.1"
+lz4_flex = "0.12.0"
 
 [dev-dependencies]
 serde = { version = "1", features = ["derive"] }

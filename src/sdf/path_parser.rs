@@ -43,7 +43,6 @@ fn reflexive_relative<'a>(i: &mut In<'a>) -> PResult<()> {
 fn dot_dot<'a>(i: &mut In<'a>) -> PResult<()> {
 	one(i, '.')?;
 	one(i, '.')?;
-	println!("DotDot");
 	if i.ctx.path.is_empty() {
 		i.ctx.path = sdf::Path::reflexive_relative_path();
 	}
@@ -63,12 +62,6 @@ fn variant_selection<'a>(i: &mut In<'a>) -> PResult<()> {
 	let variant = opt(i, identifier)?;
 	pad(i, |i| one(i, '}'), blank)?;
 
-	println!(
-		"VariantSelection: {} = {}",
-		variant_set,
-		variant.unwrap_or("<None>")
-	);
-
 	i.ctx.path = i
 		.ctx
 		.path
@@ -83,8 +76,6 @@ fn variant_selections<'a>(i: &mut In<'a>) -> PResult<()> {
 
 fn prim_name<'a>(i: &mut In<'a>) -> PResult<()> {
 	let name = identifier(i)?;
-
-	println!("PrimName: {}", name);
 
 	if i.ctx.path.is_empty() {
 		i.ctx.path = sdf::Path::reflexive_relative_path();
@@ -118,10 +109,6 @@ fn property_name<'a>(i: &mut In<'a>) -> PResult<&'a str> {
 fn prop_elts<'a>(i: &mut In<'a>) -> PResult<&'a str> {
 	one(i, '.')?;
 	let prop_name = property_name(i)?;
-
-	// TODO: optional TargetPathSeq, MapperPathSeq, Expression
-
-	println!("PropElts: {}", prop_name);
 
 	if i.ctx.path.is_empty() {
 		i.ctx.path = sdf::Path::reflexive_relative_path();

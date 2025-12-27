@@ -1,5 +1,5 @@
 /// Represents a time offset and scale between layers.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct Retiming {
 	pub offset: f64,
 	pub scale: f64,

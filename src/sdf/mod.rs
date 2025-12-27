@@ -1,6 +1,7 @@
 //! Scene Description Foundations
 
 mod abstract_data;
+mod layer;
 mod list_op;
 mod path;
 mod path_node;
@@ -9,10 +10,13 @@ mod retiming;
 mod schema;
 
 pub use abstract_data::*;
+pub use layer::*;
 pub use list_op::*;
 pub use path::*;
 pub use retiming::*;
 pub use schema::{CHILDREN_KEYS, FIELD_KEYS};
+
+use crate::vt;
 
 /// An enum that specifies the type of an object.
 /// Objects have fields and are adressable by path.
@@ -35,25 +39,20 @@ pub enum SpecForm {
 }
 
 /// An enum that identifies the possible specifiers for a PrimSpec.
+#[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Specifier {
-	Def,
-	Over,
-	Class,
-}
-
-/// An enum that defines permission levels.
-#[derive(Debug, Clone, Copy)]
-pub enum Permission {
-	Public,
-	Private,
+	Def = 0,
+	Over = 1,
+	Class = 2,
 }
 
 /// An enum that identifies variability types for attributes.
-#[derive(Debug, Clone, Copy)]
+#[repr(u32)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Variability {
-	Varying,
-	Uniform,
+	Varying = 0,
+	Uniform = 1,
 }
 
 /// Represents a reference and all its meta data.
@@ -79,6 +78,7 @@ pub struct Payload {
 }
 
 /// A single relocate specifying a source and target path for a relocation.
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct Relocate {
 	pub source: Path,
 	pub target: Path,
@@ -104,3 +104,16 @@ impl AssetPath {
 		}
 	}
 }
+
+/// A special value type that can be used to explicitly author an
+/// opinion for an attribute's default value or time sample value
+/// that represents having no value. Note that this is different
+/// from not having a value authored.
+#[derive(Debug, Clone)]
+pub struct ValueBlock;
+
+/// A map from sample times to sample values.
+pub type TimeSampleMap = Vec<(f64, vt::Value)>;
+
+/// A map of reference variant set names to variants in those sets.
+pub type VariantSelectionMap = std::collections::HashMap<String, String>;

@@ -28,7 +28,7 @@ impl<'a> Object<'a> {
 
 	/// Return true if this is a valid object, false otherwise.
 	pub fn is_valid(&self) -> bool {
-		self.spec_form().is_some()
+		self.stage.prim_index(&self.path).is_some()
 	}
 
 	/// Return the stage that owns the object, and to whose state and lifetime this object's validity is tied.
@@ -54,8 +54,7 @@ impl<'a> Object<'a> {
 	/// Return the requested metadatum named `key`.
 	pub fn metadata<T: ValueType>(&self, key: &tf::Token) -> Option<T> {
 		self.stage()
-			.data()
-			.get(self.path(), key)
+			.resolve_value(self.path(), key)
 			.and_then(|v| v.get::<T>())
 	}
 
@@ -75,6 +74,17 @@ impl<'a> Object<'a> {
 
 	#[doc(hidden)]
 	pub fn spec_form(&self) -> Option<sdf::SpecForm> {
-		self.stage().data().spec_form(self.path())
+		if self.path.is_prim_path() {
+			Some(sdf::SpecForm::Prim)
+		} else if self.path.is_prim_property_path() {
+			let type_name: Option<tf::Token> = self.metadata(&sdf::FIELD_KEYS.type_name);
+			if type_name.is_some() && !type_name.as_ref().unwrap().is_empty() {
+				Some(sdf::SpecForm::Attribute)
+			} else {
+				Some(sdf::SpecForm::Relationship)
+			}
+		} else {
+			None
+		}
 	}
 }

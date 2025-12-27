@@ -1,7 +1,7 @@
 use crate::{sdf, tf, vt};
 
 /// Interface for scene description data storage.
-pub trait AbstractData {
+pub trait AbstractData: Send + Sync {
 	/// Return the type of the spec at `path`.
 	fn spec_form(&self, path: &sdf::Path) -> Option<sdf::SpecForm>;
 

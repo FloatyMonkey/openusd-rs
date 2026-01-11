@@ -718,6 +718,8 @@ fn unpack_value_rep(file: &UsdcFile, value: ValueRep) -> Result<Option<vt::Value
 
 		Type::Vec3f if value.is_array() => read_pod_vec::<gf::Vec3f>(&mut cursor)?.into(),
 
+		Type::Quath if value.is_array() => read_pod_vec::<gf::Quath>(&mut cursor)?.into(),
+
 		Type::Quath => read_pod::<gf::Quath>(&mut cursor)?.into(),
 		Type::Quatf => read_pod::<gf::Quatf>(&mut cursor)?.into(),
 		Type::Quatd => read_pod::<gf::Quatd>(&mut cursor)?.into(),

@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::io::{Cursor, Read, Write};
 
 use super::compression;
-use crate::io_ext::{ReadBytesExt, WriteBytesExt};
+use crate::io_ext::{ReadBytesExt, Readable, WriteBytesExt, Writeable};
 
 fn encoded_buffer_size<T>(count: usize) -> usize {
 	if count == 0 {
@@ -16,40 +16,37 @@ fn encoded_buffer_size<T>(count: usize) -> usize {
 }
 
 fn decode_integers<T: Integer>(buffer: &[u8], count: usize) -> std::io::Result<Vec<T>> {
-	let common_value = i32::from_le_bytes(buffer[0..4].try_into().unwrap());
+	let mut cursor = Cursor::new(buffer);
+	let common_value = cursor.read_as::<T::Delta>()?;
 	let num_codes_bytes = (count * 2).div_ceil(8);
+	let offset = size_of::<T::Delta>();
 
-	let codes_in = &buffer[4..4 + num_codes_bytes];
-	let vints_in = &buffer[4 + num_codes_bytes..];
-
-	let mut codes_cursor = Cursor::new(codes_in);
-	let mut vints_cursor = Cursor::new(vints_in);
+	let mut codes = Cursor::new(&buffer[offset..offset + num_codes_bytes]);
+	let mut vints = Cursor::new(&buffer[offset + num_codes_bytes..]);
 
 	let mut result = Vec::new();
-
-	let mut prev_value = 0;
+	let mut prev = T::Delta::default();
 	let mut ints_left = count;
+
 	while ints_left > 0 {
 		let to_process = ints_left.min(4);
-
-		let code_byte = codes_cursor.read_as::<u8>()?;
+		let code_byte = codes.read_as::<u8>()?;
 
 		for i in 0..to_process {
-			prev_value += match (code_byte >> (2 * i)) & 3 {
-				1 => vints_cursor.read_as::<i8>()? as i32,
-				2 => vints_cursor.read_as::<i16>()? as i32,
-				3 => vints_cursor.read_as::<i32>()?,
-				_ => common_value,
+			let delta = match (code_byte >> (2 * i)) & 3 {
+				0 => common_value,
+				1 => vints.read_as::<T::Small>()?.into(),
+				2 => vints.read_as::<T::Medium>()?.into(),
+				_ => vints.read_as::<T::Delta>()?,
 			};
-
-			result.push(T::map_int(prev_value));
+			prev = prev + delta;
+			result.push(T::from_delta(prev));
 		}
 
 		ints_left -= to_process;
 	}
 
 	assert_eq!(result.len(), count);
-
 	Ok(result)
 }
 
@@ -58,51 +55,44 @@ fn encode_integers<T: Integer>(values: &[T]) -> Vec<u8> {
 		return Vec::new();
 	}
 
-	// Find the most common delta value
-	let mut delta_counts: HashMap<i32, usize> = HashMap::new();
-	let mut prev_value = 0i32;
+	let mut delta_counts: HashMap<T::Delta, usize> = HashMap::new();
+	let mut prev = T::Delta::default();
 	for value in values {
-		let current = value.to_i32();
-		let delta = current - prev_value;
-		*delta_counts.entry(delta).or_insert(0) += 1;
-		prev_value = current;
+		let cur = value.to_delta();
+		*delta_counts.entry(cur - prev).or_insert(0) += 1;
+		prev = cur;
 	}
 
-	let common_value = delta_counts
+	let common = delta_counts
 		.iter()
 		.max_by(|a, b| a.1.cmp(b.1).then(a.0.cmp(b.0)))
-		.map(|(delta, _)| *delta)
-		.unwrap_or(0);
+		.map(|(&d, _)| d)
+		.unwrap_or_default();
 
-	let mut output = Vec::new();
-	let mut cursor = Cursor::new(&mut output);
-	cursor.write_as(common_value).unwrap();
+	let mut output: Vec<u8> = Vec::new();
+	output.write_as(common).unwrap();
 
-	let num_codes_bytes = (values.len() * 2).div_ceil(8);
 	let codes_start = output.len();
-	output.resize(codes_start + num_codes_bytes, 0);
+	output.resize(codes_start + (values.len() * 2).div_ceil(8), 0);
 
-	let mut vints_data = Vec::new();
-	let mut vints_cursor = Cursor::new(&mut vints_data);
+	let mut vints: Vec<u8> = Vec::new();
 	let mut codes_pos = 0;
 	let mut bit_pos = 0;
 
-	prev_value = 0;
+	prev = T::Delta::default();
 	for value in values {
-		let current = value.to_i32();
-		let delta = current - prev_value;
-		prev_value = current;
+		let cur = value.to_delta();
+		let delta = cur - prev;
+		prev = cur;
 
-		let code = get_code(delta, common_value);
-
-		let byte_idx = codes_start + codes_pos;
-		output[byte_idx] |= code << bit_pos;
+		let code = T::get_code(delta, common);
+		output[codes_start + codes_pos] |= code << bit_pos;
 
 		match code {
-			1 => vints_cursor.write_as::<i8>(delta as i8).unwrap(),
-			2 => vints_cursor.write_as::<i16>(delta as i16).unwrap(),
-			3 => vints_cursor.write_as::<i32>(delta).unwrap(),
-			_ => {} // common_value
+			1 => vints.write_as(T::to_small(delta)).unwrap(),
+			2 => vints.write_as(T::to_medium(delta)).unwrap(),
+			3 => vints.write_as(delta).unwrap(),
+			_ => {}
 		}
 
 		bit_pos += 2;
@@ -112,20 +102,8 @@ fn encode_integers<T: Integer>(values: &[T]) -> Vec<u8> {
 		}
 	}
 
-	output.extend_from_slice(&vints_data);
+	output.extend_from_slice(&vints);
 	output
-}
-
-fn get_code(delta: i32, common_value: i32) -> u8 {
-	if delta == common_value {
-		0 // Common
-	} else if delta >= i8::MIN as i32 && delta <= i8::MAX as i32 {
-		1 // Small (i8)
-	} else if delta >= i16::MIN as i32 && delta <= i16::MAX as i32 {
-		2 // Medium (i16)
-	} else {
-		3 // Large (i32)
-	}
 }
 
 pub fn read_compressed_ints<T: Integer>(
@@ -133,7 +111,8 @@ pub fn read_compressed_ints<T: Integer>(
 	count: usize,
 ) -> std::io::Result<Vec<T>> {
 	let compressed_size = cursor.read_as::<u64>()?;
-	let workspace_size = compression::compressed_buffer_size(encoded_buffer_size::<T>(count));
+	let workspace_size =
+		compression::compressed_buffer_size(encoded_buffer_size::<T::Delta>(count));
 
 	let mut compressed_buffer = vec![0; compressed_size as usize];
 	cursor.read_exact(&mut compressed_buffer)?;
@@ -156,38 +135,73 @@ pub fn write_compressed_ints<T: Integer>(
 	Ok(())
 }
 
-// TODO: Support i64, u64 and perform intermediate computations as correct type
-pub trait Integer {
-	fn map_int(value: i32) -> Self;
-	fn to_i32(&self) -> i32;
+pub trait Integer: Sized + Copy {
+	type Delta: Copy
+		+ Ord
+		+ Default
+		+ Eq
+		+ std::hash::Hash
+		+ std::ops::Add<Output = Self::Delta>
+		+ std::ops::Sub<Output = Self::Delta>
+		+ Readable
+		+ Writeable;
+	type Small: Readable + Writeable + Copy + Into<Self::Delta>;
+	type Medium: Readable + Writeable + Copy + Into<Self::Delta>;
+
+	fn to_delta(self) -> Self::Delta;
+	fn from_delta(d: Self::Delta) -> Self;
+	fn get_code(delta: Self::Delta, common: Self::Delta) -> u8;
+	fn to_small(d: Self::Delta) -> Self::Small;
+	fn to_medium(d: Self::Delta) -> Self::Medium;
 }
 
-impl Integer for i32 {
-	fn map_int(value: i32) -> i32 {
-		value
-	}
+macro_rules! impl_integer {
+	($int:ty, $delta:ty, $small:ty, $medium:ty) => {
+		impl Integer for $int {
+			type Delta = $delta;
+			type Small = $small;
+			type Medium = $medium;
 
-	fn to_i32(&self) -> i32 {
-		*self
-	}
+			fn to_delta(self) -> $delta {
+				self as $delta
+			}
+			fn from_delta(d: $delta) -> Self {
+				d as $int
+			}
+
+			fn get_code(delta: $delta, common: $delta) -> u8 {
+				if delta == common {
+					0
+				} else if (<$small>::MIN as $delta..=<$small>::MAX as $delta).contains(&delta) {
+					1
+				} else if (<$medium>::MIN as $delta..=<$medium>::MAX as $delta).contains(&delta) {
+					2
+				} else {
+					3
+				}
+			}
+
+			fn to_small(d: $delta) -> $small {
+				d as $small
+			}
+			fn to_medium(d: $delta) -> $medium {
+				d as $medium
+			}
+		}
+	};
 }
 
-impl Integer for u32 {
-	fn map_int(value: i32) -> u32 {
-		value as u32
-	}
-
-	fn to_i32(&self) -> i32 {
-		*self as i32
-	}
-}
+impl_integer!(i32, i32, i8, i16);
+impl_integer!(u32, i32, i8, i16);
+impl_integer!(i64, i64, i16, i32);
+impl_integer!(u64, i64, i16, i32);
 
 #[cfg(test)]
 mod tests {
 	use super::*;
 
 	#[test]
-	fn encode_decode() {
+	fn encode_decode_u32() {
 		// See https://github.com/PixarAnimationStudios/OpenUSD/blob/29876eddefc2c9c62fc752da0b482456408cfd48/pxr/usd/sdf/integerCoding.cpp#L23
 		// input  = [123, 124, 125, 100125, 100125, 100126, 100126]
 		// output = [int32(1) 01 00 00 11 01 00 01 XX int8(123) int32(100000) int8(0) int8(0)]
@@ -204,5 +218,15 @@ mod tests {
 
 		assert_eq!(output, encode_integers::<u32>(&input));
 		assert_eq!(input, decode_integers::<u32>(&output, 7).unwrap());
+	}
+
+	#[test]
+	fn encode_decode_u64() {
+		let input = vec![123_u64, 124, 125, 100125, 100125, 100126, 100126];
+
+		let encoded = encode_integers::<u64>(&input);
+		let decoded = decode_integers::<u64>(&encoded, 7).unwrap();
+
+		assert_eq!(input, decoded);
 	}
 }

@@ -20,39 +20,30 @@ use crate::vt;
 
 /// An enum that specifies the type of an object.
 /// Objects have fields and are adressable by path.
-#[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum SpecForm {
-	// Note: Do not change the order, it is used in the binary format!
-	Unknown = 0,
-	Attribute = 1,
-	// Connection = 2,
-	// Expression = 3,
-	// Mapper = 4,
-	// MapperArg = 5,
-	Prim = 6,
-	Layer = 7,
-	Relationship = 8,
-	// RelationshipTarget = 9,
-	Variant = 10,
-	VariantSet = 11,
+	Unknown,
+	Layer,
+	Prim,
+	Attribute,
+	Relationship,
+	Variant,
+	VariantSet,
 }
 
 /// An enum that identifies the possible specifiers for a PrimSpec.
-#[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Specifier {
-	Def = 0,
-	Over = 1,
-	Class = 2,
+	Def,
+	Over,
+	Class,
 }
 
 /// An enum that identifies variability types for attributes.
-#[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Variability {
-	Varying = 0,
-	Uniform = 1,
+	Varying,
+	Uniform,
 }
 
 /// Represents a reference and all its meta data.
@@ -109,8 +100,14 @@ impl AssetPath {
 /// opinion for an attribute's default value or time sample value
 /// that represents having no value. Note that this is different
 /// from not having a value authored.
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
 pub struct ValueBlock;
+
+/// Value type that represents a time code. It's equivalent to a double type
+/// value but is used to indicate that this value should be resolved by any
+/// time based value resolution.
+#[derive(Default, Debug, Clone, Copy, PartialEq)]
+pub struct TimeCode(pub f64);
 
 /// A map from sample times to sample values.
 pub type TimeSampleMap = Vec<(f64, vt::Value)>;

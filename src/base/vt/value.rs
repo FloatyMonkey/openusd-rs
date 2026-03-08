@@ -71,6 +71,7 @@ macro_rules! impl_value_type {
 
 macro_rules! def_value_types {
 	($( ($t:ty, $v:ident $(, $va:ident)? ) ),* $(,)? ) => {
+		#[non_exhaustive]
 		#[derive(Debug, Clone)]
 		pub enum ValueStore {
 			Empty,
@@ -143,8 +144,9 @@ def_value_types!(
 	(sdf::Relocate, Relocate, RelocateArray),
 	//
 	(sdf::ValueBlock, ValueBlock),
+	(sdf::TimeCode, TimeCode, TimeCodeArray),
+	(sdf::TimeSampleMap, TimeSampleMap),
+	(sdf::VariantSelectionMap, VariantSelectionMap),
 	//
 	(Dictionary, Dictionary),
-	(sdf::TimeSampleMap, TimeSampleMap),
-	(sdf::VariantSelectionMap, VariantSelectionMap)
 );

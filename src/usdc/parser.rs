@@ -442,7 +442,7 @@ fn read_specs(cursor: &mut Cursor<&[u8]>, section: &Section) -> Result<Vec<Spec>
 		spec.push(Spec {
 			path_index: PathIndex(path_indices[i]),
 			field_set_index: FieldSetIndex(field_set_indices[i]),
-			spec_form: unsafe { std::mem::transmute::<u32, sdf::SpecForm>(spec_types[i]) },
+			spec_form: read_spec_form(spec_types[i]),
 		});
 	}
 
@@ -456,6 +456,10 @@ fn read_int_array<T: Clone + Integer>(
 	cursor: &mut Cursor<&[u8]>,
 	rep: ValueRep,
 ) -> Result<vt::Array<T>> {
+	if rep.payload() == 0 {
+		return Ok(vt::Array::new());
+	}
+
 	let count = cursor.read_as::<u64>()? as usize;
 
 	if !rep.is_compressed() {
@@ -475,6 +479,10 @@ fn read_float_array<T: Clone + Float>(
 	cursor: &mut Cursor<&[u8]>,
 	rep: ValueRep,
 ) -> Result<vt::Array<T>> {
+	if rep.payload() == 0 {
+		return Ok(vt::Array::new());
+	}
+
 	let count = cursor.read_as::<u64>()? as usize;
 
 	if !rep.is_compressed() {
@@ -614,7 +622,14 @@ fn read_pod<T: Sized + Default>(cursor: &mut Cursor<&[u8]>) -> Result<T> {
 	Ok(pod)
 }
 
-fn read_pod_vec<T: Sized + Clone + Default>(cursor: &mut Cursor<&[u8]>) -> Result<vt::Array<T>> {
+fn read_pod_array<T: Sized + Clone + Default>(
+	cursor: &mut Cursor<&[u8]>,
+	rep: ValueRep,
+) -> Result<vt::Array<T>> {
+	if rep.payload() == 0 {
+		return Ok(vt::Array::new());
+	}
+
 	let n = cursor.read_as::<u64>()? as usize;
 
 	let mut vec: Vec<T> = vec![Default::default(); n];
@@ -640,13 +655,8 @@ fn read_inline(file: &UsdcFile, val: ValueRep) -> Option<vt::Value> {
 			file.get_string(token_index).to_string().into()
 		}
 
-		Type::Specifier => {
-			unsafe { std::mem::transmute::<u32, sdf::Specifier>(val.payload() as u32) }.into()
-		}
-
-		Type::Variability => {
-			unsafe { std::mem::transmute::<u32, sdf::Variability>(val.payload() as u32) }.into()
-		}
+		Type::Specifier => read_specifier(val.payload() as u32).into(),
+		Type::Variability => read_variability(val.payload() as u32).into(),
 
 		Type::ValueBlock => sdf::ValueBlock.into(),
 
@@ -661,6 +671,7 @@ fn read_inline(file: &UsdcFile, val: ValueRep) -> Option<vt::Value> {
 		Type::Half => f16::from_bits(val.payload() as u16).into(),
 		Type::Float => f32::from_bits(val.payload() as u32).into(),
 		Type::Double => f64::from_bits(val.payload()).into(),
+		Type::TimeCode => sdf::TimeCode(f64::from_bits(val.payload())).into(),
 
 		Type::Vec2i => read_inline_vec2::<i32>(val).into(),
 		Type::Vec2h => read_inline_vec2::<f16>(val).into(),
@@ -693,34 +704,47 @@ fn unpack_value_rep(file: &UsdcFile, value: ValueRep) -> Result<Option<vt::Value
 	}
 
 	let mut cursor = Cursor::new(buffer.as_slice());
+	// TODO: Doesn't work for empty arrays where the payload is zero.
 	cursor.set_position(value.payload());
 
 	Ok(Some(match value.ty() {
-		Type::Half if value.is_array() => read_float_array::<f16>(&mut cursor, value)?.into(),
-		Type::Float if value.is_array() => read_float_array::<f32>(&mut cursor, value)?.into(),
-		Type::Double if value.is_array() => read_float_array::<f64>(&mut cursor, value)?.into(),
-		Type::DoubleVector => read_pod_vec::<f64>(&mut cursor)?.into(),
-
 		Type::String => file.read::<String>(&mut cursor)?.into(),
 
-		// TODO: This is always an inlined value
 		Type::AssetPath => {
 			let token = file.get_token(TokenIndex(value.payload() as Index));
-			vt::Value::new(sdf::AssetPath {
+			sdf::AssetPath {
 				authored_path: token.as_str().into(),
 				evaluated_path: String::new(),
 				resolved_path: "".into(),
-			})
+			}
+			.into()
 		}
 
 		Type::Int if value.is_array() => read_int_array::<i32>(&mut cursor, value)?.into(),
 		Type::UInt if value.is_array() => read_int_array::<u32>(&mut cursor, value)?.into(),
+		Type::Int64 if value.is_array() => read_int_array::<i64>(&mut cursor, value)?.into(),
+		Type::UInt64 if value.is_array() => read_int_array::<u64>(&mut cursor, value)?.into(),
 
-		Type::Vec3f if value.is_array() => read_pod_vec::<gf::Vec3f>(&mut cursor)?.into(),
+		Type::Half if value.is_array() => read_float_array::<f16>(&mut cursor, value)?.into(),
+		Type::Float if value.is_array() => read_float_array::<f32>(&mut cursor, value)?.into(),
+		Type::Double if value.is_array() => read_float_array::<f64>(&mut cursor, value)?.into(),
 
-		Type::Quath => read_pod::<gf::Quath>(&mut cursor)?.into(),
-		Type::Quatf => read_pod::<gf::Quatf>(&mut cursor)?.into(),
-		Type::Quatd => read_pod::<gf::Quatd>(&mut cursor)?.into(),
+		Type::Double => cursor.read_as::<f64>()?.into(),
+
+		Type::Vec2h if value.is_array() => read_pod_array::<gf::Vec2h>(&mut cursor, value)?.into(),
+		Type::Vec2f if value.is_array() => read_pod_array::<gf::Vec2f>(&mut cursor, value)?.into(),
+		Type::Vec2d if value.is_array() => read_pod_array::<gf::Vec2d>(&mut cursor, value)?.into(),
+		Type::Vec2i if value.is_array() => read_pod_array::<gf::Vec2i>(&mut cursor, value)?.into(),
+
+		Type::Vec3h if value.is_array() => read_pod_array::<gf::Vec3h>(&mut cursor, value)?.into(),
+		Type::Vec3f if value.is_array() => read_pod_array::<gf::Vec3f>(&mut cursor, value)?.into(),
+		Type::Vec3d if value.is_array() => read_pod_array::<gf::Vec3d>(&mut cursor, value)?.into(),
+		Type::Vec3i if value.is_array() => read_pod_array::<gf::Vec3i>(&mut cursor, value)?.into(),
+
+		Type::Vec4h if value.is_array() => read_pod_array::<gf::Vec4h>(&mut cursor, value)?.into(),
+		Type::Vec4f if value.is_array() => read_pod_array::<gf::Vec4f>(&mut cursor, value)?.into(),
+		Type::Vec4d if value.is_array() => read_pod_array::<gf::Vec4d>(&mut cursor, value)?.into(),
+		Type::Vec4i if value.is_array() => read_pod_array::<gf::Vec4i>(&mut cursor, value)?.into(),
 
 		Type::Vec2h => read_pod::<gf::Vec2h>(&mut cursor)?.into(),
 		Type::Vec2f => read_pod::<gf::Vec2f>(&mut cursor)?.into(),
@@ -737,82 +761,38 @@ fn unpack_value_rep(file: &UsdcFile, value: ValueRep) -> Result<Option<vt::Value
 		Type::Vec4d => read_pod::<gf::Vec4d>(&mut cursor)?.into(),
 		Type::Vec4i => read_pod::<gf::Vec4i>(&mut cursor)?.into(),
 
+		Type::Quath if value.is_array() => read_pod_array::<gf::Quath>(&mut cursor, value)?.into(),
+		Type::Quatf if value.is_array() => read_pod_array::<gf::Quatf>(&mut cursor, value)?.into(),
+		Type::Quatd if value.is_array() => read_pod_array::<gf::Quatd>(&mut cursor, value)?.into(),
+
+		Type::Quath => read_pod::<gf::Quath>(&mut cursor)?.into(),
+		Type::Quatf => read_pod::<gf::Quatf>(&mut cursor)?.into(),
+		Type::Quatd => read_pod::<gf::Quatd>(&mut cursor)?.into(),
+
+		Type::Matrix2d if value.is_array() => {
+			read_pod_array::<gf::Matrix2d>(&mut cursor, value)?.into()
+		}
+		Type::Matrix3d if value.is_array() => {
+			read_pod_array::<gf::Matrix3d>(&mut cursor, value)?.into()
+		}
+		Type::Matrix4d if value.is_array() => {
+			read_pod_array::<gf::Matrix4d>(&mut cursor, value)?.into()
+		}
+
 		Type::Matrix2d => read_pod::<gf::Matrix2d>(&mut cursor)?.into(),
 		Type::Matrix3d => read_pod::<gf::Matrix3d>(&mut cursor)?.into(),
 		Type::Matrix4d => read_pod::<gf::Matrix4d>(&mut cursor)?.into(),
 
-		Type::TimeSamples => {
-			assert!(!value.is_inlined() && !value.is_compressed());
+		Type::TimeSamples => read_time_samples(file, &mut cursor)?.into(),
 
-			let offset = cursor.read_as::<i64>()?;
-			cursor.seek(std::io::SeekFrom::Current(offset - 8))?;
+		Type::PathVector => read_vector::<sdf::Path>(file, &mut cursor)?.into(),
+		Type::TokenVector => read_vector::<tf::Token>(file, &mut cursor)?.into(),
+		Type::DoubleVector => read_vector::<f64>(file, &mut cursor)?.into(),
+		Type::LayerOffsetVector => read_vector::<sdf::Retiming>(file, &mut cursor)?.into(),
+		Type::StringVector => read_vector::<String>(file, &mut cursor)?.into(),
 
-			let times_rep = read_pod::<ValueRep>(&mut cursor)?;
-			assert!(
-				times_rep.ty() == Type::DoubleVector
-					|| (times_rep.ty() == Type::Double && times_rep.is_array())
-			);
-
-			let saved_position = cursor.stream_position()?;
-
-			let times_value = unpack_value_rep(file, times_rep)?.unwrap();
-
-			let times = times_value.get::<vt::Array<f64>>().unwrap();
-
-			cursor.set_position(saved_position);
-
-			let offset = cursor.read_as::<i64>()?;
-			cursor.seek(std::io::SeekFrom::Current(offset - 8))?;
-
-			let count = cursor.read_as::<u64>()? as usize;
-			assert_eq!(count, times.len());
-
-			let mut value_reps = Vec::with_capacity(count);
-			for _ in 0..count {
-				let val = cursor.read_as::<u64>()?;
-				value_reps.push(ValueRep(val));
-			}
-
-			let values = value_reps
-				.into_iter()
-				.map(|value| unpack_value_rep(file, value).unwrap().unwrap())
-				.collect::<Vec<_>>();
-
-			times
-				.iter()
-				.copied()
-				.zip(values)
-				.collect::<sdf::TimeSampleMap>()
-				.into()
-		}
-
-		Type::PathVector => file
-			.read::<Vec<Index>>(&mut cursor)?
-			.iter()
-			.map(|i| file.get_path(PathIndex(*i)).clone())
-			.collect::<vt::Array<_>>()
-			.into(),
-
-		Type::TokenVector => file
-			.read::<Vec<Index>>(&mut cursor)?
-			.iter()
-			.map(|i| file.get_token(TokenIndex(*i)).clone())
-			.collect::<vt::Array<_>>()
-			.into(),
-
-		Type::StringVector => file
-			.read::<Vec<Index>>(&mut cursor)?
-			.iter()
-			.map(|i| file.get_string(StringIndex(*i)).to_string())
-			.collect::<vt::Array<_>>()
-			.into(),
-
-		Type::Token if value.is_array() => file
-			.read::<Vec<Index>>(&mut cursor)?
-			.iter()
-			.map(|i| file.get_token(TokenIndex(*i)).clone())
-			.collect::<vt::Array<_>>()
-			.into(),
+		// TODO: is_array so should handle case where payload is 0
+		Type::Token if value.is_array() => read_vector::<tf::Token>(file, &mut cursor)?.into(),
 
 		Type::IntListOp => file.read::<sdf::IntListOp>(&mut cursor)?.into(),
 		Type::UIntListOp => file.read::<sdf::UIntListOp>(&mut cursor)?.into(),
@@ -831,12 +811,9 @@ fn unpack_value_rep(file: &UsdcFile, value: ValueRep) -> Result<Option<vt::Value
 			sdf::PayloadListOp::from_explicit(vec![payload]).into()
 		}
 
-		Type::LayerOffsetVector => {
-			vt::Array::from(read_typed_vec::<sdf::Retiming>(file, &mut cursor)?).into()
-		}
-		Type::Relocates => {
-			vt::Array::from(read_typed_vec::<sdf::Relocate>(file, &mut cursor)?).into()
-		}
+		Type::Relocates => read_vector::<sdf::Relocate>(file, &mut cursor)?.into(),
+
+		Type::TimeCode => sdf::TimeCode(cursor.read_as::<f64>()?).into(),
 
 		Type::Dictionary => file.read::<vt::Dictionary>(&mut cursor)?.into(),
 		Type::VariantSelectionMap => file.read::<sdf::VariantSelectionMap>(&mut cursor)?.into(),
@@ -885,6 +862,11 @@ impl<T: Clone> CrateIo for Vec<T> {
 		let count = cursor.read_as::<u64>()? as usize;
 		read_contiguous(cursor, count)
 	}
+}
+
+fn read_vector<T: CrateIo>(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<vt::Array<T>> {
+	let count = cursor.read_as::<u64>()? as usize;
+	(0..count).map(|_| T::read(file, cursor)).collect()
 }
 
 fn read_typed_vec<T: CrateIo>(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<Vec<T>> {
@@ -1164,6 +1146,78 @@ impl CrateIo for sdf::Relocate {
 			target: file.read::<sdf::Path>(cursor)?,
 		})
 	}
+}
+
+fn read_spec_form(payload: u32) -> sdf::SpecForm {
+	match payload {
+		0 => sdf::SpecForm::Unknown,
+		1 => sdf::SpecForm::Attribute,
+		6 => sdf::SpecForm::Prim,
+		7 => sdf::SpecForm::Layer,
+		8 => sdf::SpecForm::Relationship,
+		10 => sdf::SpecForm::Variant,
+		11 => sdf::SpecForm::VariantSet,
+		_ => panic!("Corrupt data stream detected reading spec form"),
+	}
+}
+
+fn read_specifier(payload: u32) -> sdf::Specifier {
+	match payload {
+		0 => sdf::Specifier::Def,
+		1 => sdf::Specifier::Over,
+		2 => sdf::Specifier::Class,
+		_ => panic!("Corrupt data stream detected reading specifier"),
+	}
+}
+
+fn read_variability(payload: u32) -> sdf::Variability {
+	match payload {
+		0 => sdf::Variability::Varying,
+		1 => sdf::Variability::Uniform,
+		_ => panic!("Corrupt data stream detected reading variability"),
+	}
+}
+
+fn read_time_samples(file: &UsdcFile, cursor: &mut Cursor<&[u8]>) -> Result<sdf::TimeSampleMap> {
+	let offset = cursor.read_as::<i64>()?;
+	cursor.seek(std::io::SeekFrom::Current(offset - 8))?;
+
+	let times_rep = read_pod::<ValueRep>(cursor)?;
+	assert!(
+		times_rep.ty() == Type::DoubleVector
+			|| (times_rep.ty() == Type::Double && times_rep.is_array())
+	);
+
+	let saved_position = cursor.stream_position()?;
+
+	let times_value = unpack_value_rep(file, times_rep)?.unwrap();
+
+	let times = times_value.get::<vt::Array<f64>>().unwrap();
+
+	cursor.set_position(saved_position);
+
+	let offset = cursor.read_as::<i64>()?;
+	cursor.seek(std::io::SeekFrom::Current(offset - 8))?;
+
+	let count = cursor.read_as::<u64>()? as usize;
+	assert_eq!(count, times.len());
+
+	let mut value_reps = Vec::with_capacity(count);
+	for _ in 0..count {
+		let val = cursor.read_as::<u64>()?;
+		value_reps.push(ValueRep(val));
+	}
+
+	let values = value_reps
+		.into_iter()
+		.map(|value| unpack_value_rep(file, value).unwrap().unwrap())
+		.collect::<Vec<_>>();
+
+	Ok(times
+		.iter()
+		.copied()
+		.zip(values)
+		.collect::<sdf::TimeSampleMap>())
 }
 
 trait Float {
